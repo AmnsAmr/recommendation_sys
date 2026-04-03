@@ -1,0 +1,136 @@
+services:
+
+  # ── API Gateway ────────────────────────────────────────────────
+  api-gateway:
+    build: ./backend/api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      USER_SERVICE_URL: http://user-service:8081
+      VIDEO_SERVICE_URL: http://video-service:8082
+      REC_SERVICE_URL: http://recommendation-service:8083
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - user-service
+      - video-service
+      - recommendation-service
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── User Service ───────────────────────────────────────────────
+  user-service:
+    build: ./backend/user-service
+    container_name: user-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: ${SUPABASE_DB_URL_USER}
+      SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      SERVER_PORT: 8081
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── Video Service ──────────────────────────────────────────────
+  video-service:
+    build: ./backend/video-service
+    container_name: video-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: ${SUPABASE_DB_URL_VIDEO}
+      SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_SASL_USERNAME: ${KAFKA_SASL_USERNAME}
+      KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_PORT: 8082
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── Recommendation Service ────────────────────────────────────
+  recommendation-service:
+    build: ./backend/recommendation-service
+    container_name: recommendation-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: ${SUPABASE_DB_URL_REC}
+      SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_SASL_USERNAME: ${KAFKA_SASL_USERNAME}
+      KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SVD_SIDECAR_URL: http://svd-sidecar:5000
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_PORT: 8083
+    depends_on:
+      - redis
+      - svd-sidecar
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── SVD Python Sidecar ────────────────────────────────────────
+  svd-sidecar:
+    build: ./ml/svd-sidecar
+    container_name: svd-sidecar
+    ports:
+      - "5000:5000"
+    environment:
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL_REC}
+      SUPABASE_DB_USERNAME: ${SUPABASE_DB_USERNAME}
+      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── Frontend ──────────────────────────────────────────────────
+  frontend:
+    build: ./frontend/next-app
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api-gateway:8080
+    depends_on:
+      - api-gateway
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - platform-net
+    restart: on-failure
+    command: redis-server --appendonly yes
+
+# ── Volumes ────────────────────────────────────────────────────
+volumes:
+  redis-data:
+
+# ── Networks ───────────────────────────────────────────────────
+networks:
+  platform-net:
+    driver: bridge

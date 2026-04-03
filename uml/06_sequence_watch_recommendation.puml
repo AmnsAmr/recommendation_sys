@@ -1,0 +1,50 @@
+@startuml Watch Event & Recommendation Update — Sequence Diagram
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam SequenceArrowColor #555555
+skinparam SequenceBoxBorderColor #888888
+
+title Watch Event → Recommendation Update Flow
+
+actor "User" as user
+participant "Frontend\n(Next.js)" as fe
+participant "API Gateway\n:8080" as gw
+participant "Video Service\n:8082" as vs
+queue "Kafka" as kafka
+participant "Rec Service\n:8083" as rec
+database "Rec DB\n(Supabase)" as recDb
+participant "Redis Cache" as redis
+
+user -> fe : watches video (plays in player)
+
+note over fe : Frontend tracks watch time\nevery 30s or on video end
+
+fe -> gw : POST /videos/watch\n{ userId, videoId, watchDuration,\n  videoDuration, completionPct }
+gw -> vs : forward
+vs -> kafka : publish video.watched\n{ userId, videoId, completionPct,\n  watchDuration, timestamp }
+vs --> gw : 200 OK
+gw --> fe : 200 OK
+
+kafka -> rec : consume video.watched
+
+rec -> rec : compute score\n(completionPct × 1.0)
+rec -> recDb : INSERT interaction\n{ userId, videoId, score }
+rec -> rec : update SVD user/item factors\n(incremental update)
+rec -> redis : invalidate cache\nfor this userId
+
+note over redis : Next homepage request\nwill recompute fresh\nrecommendations
+
+user -> fe : navigates to homepage
+
+fe -> gw : GET /recommendations/{userId}
+gw -> rec : forward
+rec -> redis : get cached recs for userId
+note right of redis : cache miss\n(was just invalidated)
+rec -> rec : run hybrid score:\n  SVD score (0.6 weight)\n  + content-based (0.4 weight)
+rec -> redis : cache result (TTL 10 min)
+rec --> gw : [ videoId1, videoId2, ... ]
+gw --> fe : recommendation list
+fe --> user : refreshed homepage feed
+
+@enduml

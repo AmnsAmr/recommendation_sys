@@ -1,0 +1,76 @@
+@startuml Monorepo Folder Structure
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+
+title Monorepo — Folder Structure
+
+salt
+{
+  {T
+    + video-platform/                   | root monorepo
+    ++ docker-compose.yml               | runs everything locally
+    ++ .env.example                     | shared env vars template
+    ++ README.md
+    ++_ backend/
+    +++ user-service/                   | Spring Boot — port 8081
+    ++++ src/main/java/
+    +++++ controller/
+    +++++ service/
+    +++++ repository/
+    +++++ model/
+    +++++ dto/
+    +++++ security/
+    +++++ kafka/
+    ++++ src/main/resources/
+    +++++ application.yml
+    ++++ pom.xml
+    +++ video-service/                  | Spring Boot — port 8082
+    ++++ src/main/java/
+    +++++ controller/
+    +++++ service/
+    +++++ repository/
+    +++++ model/
+    +++++ dto/
+    +++++ kafka/
+    ++++ src/main/resources/
+    +++++ application.yml
+    ++++ pom.xml
+    +++ recommendation-service/         | Spring Boot — port 8083
+    ++++ src/main/java/
+    +++++ controller/
+    +++++ service/
+    +++++ repository/
+    +++++ model/
+    +++++ kafka/
+    ++++ src/main/resources/
+    +++++ application.yml
+    ++++ pom.xml
+    +++ api-gateway/                    | Spring Cloud Gateway — port 8080
+    ++++ src/main/resources/
+    +++++ application.yml               | routing rules defined here
+    ++++ pom.xml
+    ++_ frontend/
+    +++ next-app/                       | Next.js + TypeScript — port 3000
+    ++++ app/
+    +++++ page.tsx                      | homepage / recommendations
+    +++++ upload/page.tsx
+    +++++ watch/[id]/page.tsx
+    ++++ components/
+    +++++ VideoCard.tsx
+    +++++ VideoPlayer.tsx
+    +++++ RecommendationFeed.tsx
+    ++++ lib/
+    +++++ api.ts                        | all API call functions
+    ++++ public/
+    ++++ package.json
+    ++_ ml/                             | optional Python scripts
+    +++ svd_train.py                    | offline SVD retraining
+    +++ requirements.txt
+    ++_ uml/                            | PlantUML diagrams
+    +++ 01_system_architecture.puml
+    +++ 02_user_service_classes.puml
+    +++ ...
+  }
+}
+@enduml

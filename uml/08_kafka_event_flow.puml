@@ -1,0 +1,37 @@
+@startuml Kafka Event Flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+
+title Kafka Event Flow — All Topics
+
+participant "User Service\n:8081" as us
+participant "Video Service\n:8082" as vs
+queue "video.watched" as tw
+queue "video.liked" as tl
+queue "user.searched" as ts
+queue "video.uploaded" as tu
+participant "Rec Service\n:8083" as rec
+
+note over tw, tu
+  All topics consumed exclusively
+  by Recommendation Service
+end note
+
+vs -> tw : publish\n{\n  userId, videoId,\n  completionPct,\n  watchDuration,\n  timestamp\n}
+
+vs -> tl : publish\n{\n  userId, videoId,\n  action: like|dislike,\n  timestamp\n}
+
+vs -> ts : publish\n{\n  userId, query,\n  resultVideoIds[],\n  clickedVideoId,\n  timestamp\n}
+
+vs -> tu : publish\n{\n  videoId, title,\n  tags[], categoryId,\n  source: own|youtube,\n  timestamp\n}
+
+tw -> rec : consume\n→ score = completionPct\n→ INSERT interaction\n→ update SVD factors\n→ invalidate cache
+
+tl -> rec : consume\n→ score = like(1.0) | dislike(-1.0)\n→ INSERT interaction\n→ invalidate cache
+
+ts -> rec : consume\n→ score = 0.5 if clicked\n→ update content profile\n→ INSERT interaction
+
+tu -> rec : consume\n→ INSERT item_factors\n→ build content index\n→ (no cache invalidation)
+
+@enduml

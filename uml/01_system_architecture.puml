@@ -1,0 +1,57 @@
+@startuml System Architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ArrowColor #555555
+skinparam componentBorderColor #888888
+
+title Video Platform — System Architecture
+
+actor "User" as user
+
+package "Frontend" {
+  [Next.js / React + TypeScript\nport 3000] as frontend
+}
+
+package "Backend — Spring Boot Microservices" {
+  [API Gateway\nSpring Cloud Gateway\nport 8080] as gateway
+
+  [User Service\nport 8081] as userSvc
+  [Video Service\nport 8082] as videoSvc
+  [Recommendation Service\nport 8083] as recSvc
+}
+
+package "Event Bus" {
+  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded" as kafka
+}
+
+package "Storage" {
+  database "User DB\nPostgreSQL / Supabase" as userDb
+  database "Video DB\nPostgreSQL / Supabase" as videoDb
+  database "Rec DB\nPostgreSQL / Supabase" as recDb
+  [Redis Cache\npre-computed recs] as redis
+  [S3 / Cloudflare R2\nvideo files] as s3
+}
+
+package "External" {
+  [YouTube Data API v3] as ytApi
+}
+
+user --> frontend : HTTP
+frontend --> gateway : REST / HTTPS
+gateway --> userSvc : route /users/**
+gateway --> videoSvc : route /videos/**
+gateway --> recSvc : route /recommendations/**
+
+userSvc --> userDb
+videoSvc --> videoDb
+videoSvc --> s3 : upload/stream
+videoSvc --> ytApi : fetch catalog
+recSvc --> recDb
+recSvc --> redis : cache results
+
+videoSvc --> kafka : publishes events
+userSvc --> kafka : publishes events
+kafka --> recSvc : consumes all topics
+
+@enduml

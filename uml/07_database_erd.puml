@@ -1,0 +1,97 @@
+@startuml Database Schema — ERD
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+
+title Database Schema (all services — Supabase/PostgreSQL)
+
+note as N1
+  Each service uses its own schema
+  in Supabase (logical separation).
+  No cross-schema JOINs in code.
+end note
+
+package "user_schema" #E8F4F8 {
+  entity "users" as users {
+    * id : UUID <<PK>>
+    --
+    * email : VARCHAR(255) <<UNIQUE>>
+    * password_hash : VARCHAR
+    * username : VARCHAR(100)
+    * created_at : TIMESTAMP
+  }
+
+  entity "user_preferences" as prefs {
+    * id : UUID <<PK>>
+    --
+    * user_id : UUID <<FK>>
+    * category : VARCHAR(100)
+    * weight : FLOAT
+    * updated_at : TIMESTAMP
+  }
+
+  users ||--o{ prefs : has
+}
+
+package "video_schema" #F0F8E8 {
+  entity "videos" as videos {
+    * id : VARCHAR(100) <<PK>>
+    --
+    * title : VARCHAR(500)
+    * description : TEXT
+    * category_id : VARCHAR <<FK>>
+    * duration : INTEGER
+    * source : ENUM(own, youtube)
+    youtube_id : VARCHAR
+    * uploader_id : UUID
+    s3_key : VARCHAR
+    * status : ENUM(pending, ready)
+    * created_at : TIMESTAMP
+  }
+
+  entity "video_tags" as tags {
+    * video_id : VARCHAR <<FK>>
+    * tag : VARCHAR(100)
+    --
+    <<PK: video_id + tag>>
+  }
+
+  entity "categories" as cats {
+    * id : VARCHAR <<PK>>
+    --
+    * name : VARCHAR(100)
+  }
+
+  videos ||--o{ tags : has
+  videos }o--|| cats : belongs to
+}
+
+package "recommendation_schema" #F8F0F8 {
+  entity "interactions" as interactions {
+    * id : UUID <<PK>>
+    --
+    * user_id : UUID
+    * video_id : VARCHAR
+    * event_type : ENUM(watch,like,dislike,search_click)
+    * score : FLOAT
+    * created_at : TIMESTAMP
+  }
+
+  entity "user_factors" as ufactors {
+    * user_id : UUID <<PK>>
+    --
+    * vector : FLOAT[]
+    * updated_at : TIMESTAMP
+  }
+
+  entity "item_factors" as ifactors {
+    * video_id : VARCHAR <<PK>>
+    --
+    * vector : FLOAT[]
+    * tags : TEXT[]
+    * category_id : VARCHAR
+    * updated_at : TIMESTAMP
+  }
+}
+
+@enduml

@@ -1,0 +1,138 @@
+@startuml Recommendation Service — Class Diagram
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #888888
+skinparam ClassBackgroundColor #F8F8F8
+
+title Recommendation Service — Class Diagram
+
+package "recommendation-service" {
+
+  package "model" {
+    enum EventType {
+      WATCH
+      LIKE
+      DISLIKE
+      SEARCH_CLICK
+    }
+
+    class Interaction {
+      - id: UUID
+      - userId: UUID
+      - videoId: String
+      - eventType: EventType
+      - score: Double
+      - createdAt: LocalDateTime
+    }
+
+    class UserFactor {
+      - userId: UUID
+      - vector: double[]
+      - updatedAt: LocalDateTime
+    }
+
+    class ItemFactor {
+      - videoId: String
+      - vector: double[]
+      - tags: List<String>
+      - categoryId: String
+      - updatedAt: LocalDateTime
+    }
+  }
+
+  package "controller" {
+    class RecommendationController {
+      - recommendationService: RecommendationService
+      + getRecommendations(userId: UUID, limit: int): List<String>
+      + getSimilarVideos(videoId: String, limit: int): List<String>
+      + getColdStartRecommendations(categoryId: String): List<String>
+    }
+  }
+
+  package "service" {
+    class RecommendationService {
+      - interactionRepository: InteractionRepository
+      - userFactorRepository: UserFactorRepository
+      - itemFactorRepository: ItemFactorRepository
+      - svdService: SVDService
+      - contentBasedService: ContentBasedService
+      - cacheService: CacheService
+      + getRecommendations(userId: UUID, limit: int): List<String>
+      + getSimilarVideos(videoId: String, limit: int): List<String>
+      + hybridScore(svdScore: Double, cbScore: Double): Double
+    }
+
+    class SVDService {
+      - latentFactors: int
+      - learningRate: double
+      - regularization: double
+      + train(interactions: List<Interaction>): void
+      + predictScore(userId: UUID, videoId: String): Double
+      + updateFactors(interaction: Interaction): void
+    }
+
+    class ContentBasedService {
+      - itemFactorRepository: ItemFactorRepository
+      + buildItemProfile(video: ItemFactor): double[]
+      + cosineSimilarity(v1: double[], v2: double[]): Double
+      + getSimilarItems(videoId: String, limit: int): List<String>
+      + scoreByUserPreference(userId: UUID, videoId: String): Double
+    }
+
+    class CacheService {
+      - redisTemplate: RedisTemplate
+      - ttlMinutes: int
+      + getCachedRecommendations(userId: UUID): List<String>
+      + cacheRecommendations(userId: UUID, videoIds: List<String>): void
+      + invalidate(userId: UUID): void
+    }
+  }
+
+  package "kafka" {
+    class RecommendationEventConsumer {
+      - recommendationService: RecommendationService
+      - interactionRepository: InteractionRepository
+      - cacheService: CacheService
+      + onVideoWatched(event: VideoWatchedEvent): void
+      + onVideoLiked(event: VideoLikedEvent): void
+      + onUserSearched(event: UserSearchedEvent): void
+      + onVideoUploaded(event: VideoUploadedEvent): void
+      - toScore(event: VideoWatchedEvent): Double
+      - invalidateCache(userId: UUID): void
+    }
+  }
+
+  package "repository" {
+    interface InteractionRepository {
+      + findByUserId(userId: UUID): List<Interaction>
+      + findByVideoId(videoId: String): List<Interaction>
+      + findAll(): List<Interaction>
+    }
+
+    interface UserFactorRepository {
+      + findByUserId(userId: UUID): Optional<UserFactor>
+      + save(factor: UserFactor): UserFactor
+    }
+
+    interface ItemFactorRepository {
+      + findByVideoId(videoId: String): Optional<ItemFactor>
+      + findByCategoryId(categoryId: String): List<ItemFactor>
+      + save(factor: ItemFactor): ItemFactor
+    }
+  }
+
+  RecommendationController --> RecommendationService
+  RecommendationService --> SVDService
+  RecommendationService --> ContentBasedService
+  RecommendationService --> CacheService
+  RecommendationService --> InteractionRepository
+  RecommendationEventConsumer --> RecommendationService
+  RecommendationEventConsumer --> InteractionRepository
+  RecommendationEventConsumer --> CacheService
+  SVDService --> UserFactorRepository
+  SVDService --> ItemFactorRepository
+  ContentBasedService --> ItemFactorRepository
+}
+
+@enduml

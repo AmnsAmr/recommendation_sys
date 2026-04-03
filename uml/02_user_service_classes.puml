@@ -1,0 +1,110 @@
+@startuml User Service — Class Diagram
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #888888
+skinparam ClassBackgroundColor #F8F8F8
+
+title User Service — Class Diagram
+
+package "user-service" {
+
+  package "model" {
+    class User {
+      - id: UUID
+      - email: String
+      - passwordHash: String
+      - username: String
+      - createdAt: LocalDateTime
+      + getId(): UUID
+      + getEmail(): String
+    }
+
+    class UserPreference {
+      - id: UUID
+      - userId: UUID
+      - category: String
+      - weight: Double
+      - updatedAt: LocalDateTime
+    }
+
+    User "1" --> "many" UserPreference : has
+  }
+
+  package "dto" {
+    class RegisterRequest {
+      + email: String
+      + password: String
+      + username: String
+    }
+
+    class LoginRequest {
+      + email: String
+      + password: String
+    }
+
+    class AuthResponse {
+      + token: String
+      + userId: UUID
+      + username: String
+    }
+
+    class UserProfileResponse {
+      + userId: UUID
+      + username: String
+      + email: String
+      + preferences: List<UserPreference>
+    }
+  }
+
+  package "controller" {
+    class UserController {
+      - userService: UserService
+      + register(request: RegisterRequest): ResponseEntity
+      + login(request: LoginRequest): AuthResponse
+      + getProfile(userId: UUID): UserProfileResponse
+      + updatePreferences(userId: UUID, prefs: List): ResponseEntity
+    }
+  }
+
+  package "service" {
+    class UserService {
+      - userRepository: UserRepository
+      - jwtUtil: JwtUtil
+      - passwordEncoder: PasswordEncoder
+      + register(request: RegisterRequest): User
+      + login(request: LoginRequest): AuthResponse
+      + getUserById(id: UUID): User
+      + updatePreferences(userId: UUID, prefs: List): void
+    }
+  }
+
+  package "repository" {
+    interface UserRepository {
+      + findByEmail(email: String): Optional<User>
+      + findById(id: UUID): Optional<User>
+    }
+
+    interface UserPreferenceRepository {
+      + findByUserId(userId: UUID): List<UserPreference>
+      + deleteByUserId(userId: UUID): void
+    }
+  }
+
+  package "security" {
+    class JwtUtil {
+      - secret: String
+      - expiration: Long
+      + generateToken(userId: UUID): String
+      + validateToken(token: String): boolean
+      + extractUserId(token: String): UUID
+    }
+  }
+
+  UserController --> UserService
+  UserService --> UserRepository
+  UserService --> UserPreferenceRepository
+  UserService --> JwtUtil
+}
+
+@enduml
