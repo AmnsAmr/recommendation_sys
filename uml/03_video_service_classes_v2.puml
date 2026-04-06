@@ -1,0 +1,247 @@
+@startuml Video Service — Class Diagram (v2)
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #888888
+skinparam ClassBackgroundColor #F8F8F8
+
+title Video Service — Class Diagram (v2)
+
+package "video-service" {
+
+  package "model" {
+    enum VideoSource {
+      OWN
+      YOUTUBE
+    }
+
+    enum VideoStatus {
+      PENDING
+      PROCESSING
+      READY
+      FAILED
+    }
+
+    class Video {
+      - id: String
+      - title: String
+      - description: String
+      - categoryId: String
+      - duration: Integer
+      - source: VideoSource
+      - youtubeId: String
+      - uploaderId: UUID
+      - s3Key: String
+      - thumbnailUrl: String
+      - viewCount: Long
+      - likeCount: Long
+      - dislikeCount: Long
+      - language: String
+      - status: VideoStatus
+      - createdAt: LocalDateTime
+      - updatedAt: LocalDateTime
+    }
+
+    class VideoTag {
+      - videoId: String
+      - tag: String
+    }
+
+    class Category {
+      - id: String
+      - name: String
+    }
+
+    class UploadToken {
+      - token: UUID
+      - videoId: String
+      - uploaderId: UUID
+      - expiresAt: LocalDateTime
+      - used: boolean
+    }
+
+    class WatchSession {
+      - id: UUID
+      - userId: UUID
+      - videoId: String
+      - watchDuration: Integer
+      - videoDuration: Integer
+      - completionPct: Double
+      - rewatchCount: Integer
+      - source: VideoSource
+      - createdAt: LocalDateTime
+    }
+
+    Video "1" --> "many" VideoTag : has
+    Video "many" --> "1" Category : belongs to
+    Video "1" --> "many" WatchSession : tracked by
+    Video "1" --> "many" UploadToken : authorized by
+  }
+
+  package "dto" {
+    class VideoUploadInitRequest {
+      + title: String
+      + description: String
+      + categoryId: String
+      + tags: List<String>
+      + language: String
+    }
+
+    class VideoUploadInitResponse {
+      + videoId: String
+      + uploadToken: String
+      + expiresAt: LocalDateTime
+    }
+
+    class VideoResponse {
+      + id: String
+      + title: String
+      + description: String
+      + categoryId: String
+      + tags: List<String>
+      + source: String
+      + youtubeId: String
+      + thumbnailUrl: String
+      + duration: Integer
+      + viewCount: Long
+      + likeCount: Long
+      + dislikeCount: Long
+      + language: String
+      + uploaderId: UUID
+      + status: String
+      + createdAt: LocalDateTime
+    }
+
+    class WatchRequest {
+      + videoId: String
+      + watchDuration: Integer
+      + videoDuration: Integer
+      + completionPct: Double
+      + source: String
+    }
+
+    class LikeRequest {
+      + action: String
+    }
+
+    class SearchClickRequest {
+      + query: String
+      + resultVideoIds: List<String>
+      + clickedVideoId: String
+    }
+  }
+
+  package "controller" {
+    class VideoController {
+      - videoService: VideoService
+      + initUpload(request: VideoUploadInitRequest): ResponseEntity<VideoUploadInitResponse>
+      + uploadFile(videoId: String, token: String, file: MultipartFile): ResponseEntity<VideoResponse>
+      + getVideo(videoId: String): ResponseEntity<VideoResponse>
+      + getUserVideos(userId: UUID, page: int, size: int): ResponseEntity<Page<VideoResponse>>
+      + getCatalog(categoryId: String, source: String, page: int, size: int): ResponseEntity<Page<VideoResponse>>
+      + search(q: String, page: int, size: int): ResponseEntity<Page<VideoResponse>>
+      + recordWatch(request: WatchRequest): ResponseEntity<Void>
+      + likeVideo(videoId: String, request: LikeRequest): ResponseEntity<VideoResponse>
+      + recordSearchClick(request: SearchClickRequest): ResponseEntity<Void>
+    }
+  }
+
+  package "service" {
+    class VideoService {
+      - videoRepository: VideoRepository
+      - watchSessionRepository: WatchSessionRepository
+      - uploadTokenRepository: UploadTokenRepository
+      - storageService: StorageService
+      - kafkaProducer: VideoEventProducer
+      - youTubeService: YouTubeService
+      + initUpload(request: VideoUploadInitRequest, uploaderId: UUID): VideoUploadInitResponse
+      + uploadFile(videoId: String, token: UUID, file: MultipartFile): Video
+      + getVideoById(id: String): Video
+      + getVideosByUploader(uploaderId: UUID, page: int, size: int): Page<Video>
+      + getCatalog(categoryId: String, source: String, page: int, size: int): Page<Video>
+      + searchVideos(q: String, page: int, size: int): Page<Video>
+      + recordWatchSession(request: WatchRequest, userId: UUID): void
+      + likeVideo(videoId: String, userId: UUID, action: String): Video
+      + recordSearchClick(request: SearchClickRequest, userId: UUID): void
+      - incrementViewCount(videoId: String): void
+      - updateLikeCount(videoId: String, action: String): void
+    }
+
+    class StorageService {
+      - s3Client: S3Client
+      - bucketName: String
+      + uploadFile(file: MultipartFile, key: String): String
+      + getSignedUrl(key: String): String
+      + deleteFile(key: String): void
+    }
+
+    class YouTubeService {
+      - apiKey: String
+      + fetchVideosByCategory(categoryId: String, maxResults: int): List<Video>
+      + fetchVideoById(youtubeId: String): Video
+      + syncCatalog(categories: List<String>): void
+    }
+  }
+
+  package "kafka" {
+    class VideoEventProducer {
+      - kafkaTemplate: KafkaTemplate
+      + publishVideoUploaded(video: Video): void
+      + publishVideoWatched(session: WatchSession, userId: UUID): void
+      + publishVideoLiked(userId: UUID, videoId: String, action: String): void
+      + publishUserSearched(userId: UUID, request: SearchClickRequest): void
+    }
+  }
+
+  package "repository" {
+    interface VideoRepository {
+      + findById(id: String): Optional<Video>
+      + findByUploaderId(uploaderId: UUID, pageable: Pageable): Page<Video>
+      + findByStatus(status: VideoStatus, pageable: Pageable): Page<Video>
+      + findByCategoryId(categoryId: String, pageable: Pageable): Page<Video>
+      + findByTitleContainingOrTagsContaining(title: String, tag: String, pageable: Pageable): Page<Video>
+    }
+
+    interface WatchSessionRepository {
+      + findByUserIdAndVideoId(userId: UUID, videoId: String): List<WatchSession>
+      + countByVideoId(videoId: String): Long
+    }
+
+    interface UploadTokenRepository {
+      + findByToken(token: UUID): Optional<UploadToken>
+      + findByVideoIdAndUsed(videoId: String, used: boolean): Optional<UploadToken>
+    }
+  }
+
+  VideoController --> VideoService
+  VideoService --> VideoRepository
+  VideoService --> WatchSessionRepository
+  VideoService --> UploadTokenRepository
+  VideoService --> StorageService
+  VideoService --> YouTubeService
+  VideoService --> VideoEventProducer
+}
+
+note bottom of Video
+  v2 changes:
+  + thumbnailUrl (YouTube CDN url or generated for own uploads)
+  + viewCount (denormalized counter, incremented on each watch)
+  + likeCount / dislikeCount (denormalized, no DB scan needed)
+  + language (useful for content-based filtering)
+  + updatedAt (track edits)
+  + PROCESSING and FAILED added to VideoStatus
+end note
+
+note bottom of WatchSession
+  NEW entity — tracks each individual watch event.
+  rewatchCount: how many times this user watched this video.
+  Rewatch = very strong positive signal for recommendation.
+end note
+
+note bottom of UploadToken
+  NEW entity — persists upload tokens in DB.
+  Allows validation without in-memory state.
+  Survives service restart.
+end note
+
+@enduml

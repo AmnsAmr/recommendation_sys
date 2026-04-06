@@ -1,0 +1,265 @@
+@startuml Recommendation Service — Class Diagram (v2)
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #888888
+skinparam ClassBackgroundColor #F8F8F8
+
+title Recommendation Service — Class Diagram (v2)
+
+package "recommendation-service" {
+
+  package "model" {
+    enum EventType {
+      WATCH
+      LIKE
+      DISLIKE
+      SEARCH_CLICK
+      REWATCH
+    }
+
+    class Interaction {
+      - id: UUID
+      - userId: UUID
+      - videoId: String
+      - eventType: EventType
+      - score: Double
+      - completionPct: Double
+      - createdAt: LocalDateTime
+      ' Indexes: (userId), (videoId), (userId + videoId)
+    }
+
+    class UserFactor {
+      - userId: UUID
+      - vector: double[]
+      - interactionCount: Integer
+      - lastTrainedAt: LocalDateTime
+      - updatedAt: LocalDateTime
+    }
+
+    class ItemFactor {
+      - videoId: String
+      - vector: double[]
+      - tags: List<String>
+      - categoryId: String
+      - viewCount: Long
+      - globalScore: Double
+      - updatedAt: LocalDateTime
+    }
+
+    class UserCategoryProfile {
+      - id: UUID
+      - userId: UUID
+      - category: String
+      - weight: Double
+      - source: String
+      - updatedAt: LocalDateTime
+    }
+
+    UserFactor "1" --> "1" UserCategoryProfile : cold start source
+  }
+
+  package "controller" {
+    class RecommendationController {
+      - recommendationService: RecommendationService
+      + getRecommendations(userId: UUID, limit: int): ResponseEntity<RecommendationResponse>
+      + getSimilarVideos(videoId: String, limit: int): ResponseEntity<SimilarVideosResponse>
+      + getColdStartRecommendations(categoryId: String, limit: int): ResponseEntity<RecommendationResponse>
+    }
+  }
+
+  package "dto" {
+    class RecommendationResponse {
+      + userId: UUID
+      + strategy: String
+      + videoIds: List<String>
+      + cachedAt: LocalDateTime
+      + generatedAt: LocalDateTime
+    }
+
+    class SimilarVideosResponse {
+      + videoId: String
+      + similarVideoIds: List<String>
+      + generatedAt: LocalDateTime
+    }
+  }
+
+  package "service" {
+    class RecommendationService {
+      - interactionRepository: InteractionRepository
+      - userFactorRepository: UserFactorRepository
+      - itemFactorRepository: ItemFactorRepository
+      - userCategoryProfileRepository: UserCategoryProfileRepository
+      - svdClient: SVDSidecarClient
+      - contentBasedService: ContentBasedService
+      - cacheService: RecommendationCacheService
+      + getRecommendations(userId: UUID, limit: int): RecommendationResponse
+      + getSimilarVideos(videoId: String, limit: int): SimilarVideosResponse
+      + getColdStartRecommendations(categoryId: String, limit: int): RecommendationResponse
+      - isNewUser(userId: UUID): boolean
+      - hybridScore(svdScore: Double, cbScore: Double): Double
+      - getCandidateVideos(userId: UUID): List<String>
+    }
+
+    class SVDSidecarClient {
+      - sidecarUrl: String
+      - webClient: WebClient
+      + predict(userId: UUID, videoId: String): Double
+      + triggerTraining(): void
+    }
+
+    class ContentBasedService {
+      - itemFactorRepository: ItemFactorRepository
+      + buildUserContentProfile(interactions: List<Interaction>): double[]
+      + cosineSimilarity(v1: double[], v2: double[]): Double
+      + getSimilarItems(videoId: String, limit: int): List<String>
+      + scoreByUserProfile(userProfile: double[], videoId: String): Double
+      + scoreByDeclaredInterests(userId: UUID, videoId: String): Double
+    }
+
+    class RecommendationCacheService {
+      - redisTemplate: RedisTemplate
+      - ttlMinutes: int
+      + get(userId: UUID): Optional<List<String>>
+      + set(userId: UUID, videoIds: List<String>): void
+      + invalidate(userId: UUID): void
+    }
+  }
+
+  package "kafka" {
+    class RecommendationEventConsumer {
+      - interactionRepository: InteractionRepository
+      - itemFactorRepository: ItemFactorRepository
+      - userCategoryProfileRepository: UserCategoryProfileRepository
+      - cacheService: RecommendationCacheService
+      + onVideoWatched(event: VideoWatchedEvent): void
+      + onVideoLiked(event: VideoLikedEvent): void
+      + onUserSearched(event: UserSearchedEvent): void
+      + onVideoUploaded(event: VideoUploadedEvent): void
+      - toScore(completionPct: Double, isRewatch: boolean): Double
+      - detectRewatch(userId: UUID, videoId: String): boolean
+    }
+
+    package "events" {
+      class VideoWatchedEvent {
+        + eventId: String
+        + userId: UUID
+        + videoId: String
+        + watchDuration: Integer
+        + videoDuration: Integer
+        + completionPct: Double
+        + source: String
+        + timestamp: String
+      }
+
+      class VideoLikedEvent {
+        + eventId: String
+        + userId: UUID
+        + videoId: String
+        + action: String
+        + source: String
+        + timestamp: String
+      }
+
+      class UserSearchedEvent {
+        + eventId: String
+        + userId: UUID
+        + query: String
+        + resultVideoIds: List<String>
+        + clickedVideoId: String
+        + timestamp: String
+      }
+
+      class VideoUploadedEvent {
+        + eventId: String
+        + videoId: String
+        + title: String
+        + description: String
+        + tags: List<String>
+        + categoryId: String
+        + source: String
+        + timestamp: String
+      }
+    }
+  }
+
+  package "repository" {
+    interface InteractionRepository {
+      + findByUserId(userId: UUID): List<Interaction>
+      + findByVideoId(videoId: String): List<Interaction>
+      + countByUserId(userId: UUID): Long
+      + findByUserIdAndVideoId(userId: UUID, videoId: String): List<Interaction>
+    }
+
+    interface UserFactorRepository {
+      + findByUserId(userId: UUID): Optional<UserFactor>
+      + save(factor: UserFactor): UserFactor
+    }
+
+    interface ItemFactorRepository {
+      + findByVideoId(videoId: String): Optional<ItemFactor>
+      + findByCategoryId(categoryId: String): List<ItemFactor>
+      + findTopByGlobalScoreDesc(limit: int): List<ItemFactor>
+      + save(factor: ItemFactor): ItemFactor
+    }
+
+    interface UserCategoryProfileRepository {
+      + findByUserId(userId: UUID): List<UserCategoryProfile>
+      + deleteByUserId(userId: UUID): void
+      + save(profile: UserCategoryProfile): UserCategoryProfile
+    }
+  }
+
+  package "config" {
+    class KafkaConfig {
+      + consumerFactory(): ConsumerFactory
+      + kafkaListenerContainerFactory(): KafkaListenerContainerFactory
+    }
+
+    class RedisConfig {
+      + redisTemplate(): RedisTemplate
+    }
+  }
+
+  RecommendationController --> RecommendationService
+  RecommendationService --> SVDSidecarClient
+  RecommendationService --> ContentBasedService
+  RecommendationService --> RecommendationCacheService
+  RecommendationService --> InteractionRepository
+  RecommendationService --> UserFactorRepository
+  RecommendationService --> ItemFactorRepository
+  RecommendationEventConsumer --> InteractionRepository
+  RecommendationEventConsumer --> ItemFactorRepository
+  RecommendationEventConsumer --> UserCategoryProfileRepository
+  RecommendationEventConsumer --> RecommendationCacheService
+  ContentBasedService --> ItemFactorRepository
+}
+
+note bottom of Interaction
+  v2 changes:
+  + completionPct stored directly (useful for analysis)
+  + REWATCH added to EventType (strong positive signal)
+  + DB indexes noted: (userId), (videoId), compound (userId+videoId)
+end note
+
+note bottom of ItemFactor
+  v2 changes:
+  + viewCount (global popularity for cold start ranking)
+  + globalScore (pre-computed popularity score, updated on each watch)
+  Used for: cold start recommendations when no user history
+end note
+
+note bottom of UserCategoryProfile
+  NEW entity — stores declared interests from signup form.
+  source field: "declared" (from signup) or "inferred" (from behavior).
+  Drives cold start. When user has < 5 interactions,
+  recommendations are based on this profile.
+end note
+
+note bottom of RecommendationEventConsumer
+  detectRewatch(): checks if userId + videoId already
+  exists in interactions. If yes, score gets a +0.2 bonus.
+  Rewatch is the strongest positive implicit signal.
+end note
+
+@enduml

@@ -1,0 +1,150 @@
+@startuml User Service — Class Diagram (v2)
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #888888
+skinparam ClassBackgroundColor #F8F8F8
+
+title User Service — Class Diagram (v2)
+
+package "user-service" {
+
+  package "model" {
+    class User {
+      - id: UUID
+      - email: String
+      - passwordHash: String
+      - username: String
+      - displayName: String
+      - bio: String
+      - profilePictureUrl: String
+      - isActive: boolean
+      - createdAt: LocalDateTime
+      - updatedAt: LocalDateTime
+      + getId(): UUID
+      + getEmail(): String
+      + isActive(): boolean
+    }
+
+    class UserPreference {
+      - id: UUID
+      - userId: UUID
+      - category: String
+      - weight: Double
+      - createdAt: LocalDateTime
+      - updatedAt: LocalDateTime
+    }
+
+    User "1" --> "many" UserPreference : has
+  }
+
+  package "dto" {
+    class RegisterRequest {
+      + email: String
+      + password: String
+      + username: String
+      + displayName: String
+      + interests: List<String>
+    }
+
+    class LoginRequest {
+      + email: String
+      + password: String
+    }
+
+    class AuthResponse {
+      + token: String
+      + userId: UUID
+      + username: String
+      + expiresIn: Long
+    }
+
+    class UserProfileResponse {
+      + userId: UUID
+      + username: String
+      + displayName: String
+      + bio: String
+      + profilePictureUrl: String
+      + preferences: List<PreferenceDTO>
+      + createdAt: LocalDateTime
+    }
+
+    class UpdateProfileRequest {
+      + displayName: String
+      + bio: String
+      + profilePictureUrl: String
+    }
+
+    class PreferenceDTO {
+      + category: String
+      + weight: Double
+    }
+  }
+
+  package "controller" {
+    class UserController {
+      - userService: UserService
+      + register(request: RegisterRequest): ResponseEntity<AuthResponse>
+      + login(request: LoginRequest): ResponseEntity<AuthResponse>
+      + getProfile(userId: UUID): ResponseEntity<UserProfileResponse>
+      + updateProfile(userId: UUID, request: UpdateProfileRequest): ResponseEntity<UserProfileResponse>
+      + updatePreferences(userId: UUID, prefs: List<PreferenceDTO>): ResponseEntity<UserProfileResponse>
+    }
+  }
+
+  package "service" {
+    class UserService {
+      - userRepository: UserRepository
+      - preferenceRepository: UserPreferenceRepository
+      - jwtUtil: JwtUtil
+      - passwordEncoder: PasswordEncoder
+      + register(request: RegisterRequest): AuthResponse
+      + login(request: LoginRequest): AuthResponse
+      + getUserById(id: UUID): User
+      + updateProfile(userId: UUID, request: UpdateProfileRequest): User
+      + updatePreferences(userId: UUID, prefs: List<PreferenceDTO>): void
+      + deactivateUser(userId: UUID): void
+    }
+  }
+
+  package "repository" {
+    interface UserRepository {
+      + findByEmail(email: String): Optional<User>
+      + findById(id: UUID): Optional<User>
+      + findByUsername(username: String): Optional<User>
+      + existsByEmail(email: String): boolean
+    }
+
+    interface UserPreferenceRepository {
+      + findByUserId(userId: UUID): List<UserPreference>
+      + deleteByUserId(userId: UUID): void
+    }
+  }
+
+  package "security" {
+    class JwtUtil {
+      - secret: String
+      - expiration: Long
+      + generateToken(userId: UUID): String
+      + validateToken(token: String): boolean
+      + extractUserId(token: String): UUID
+    }
+  }
+
+  UserController --> UserService
+  UserService --> UserRepository
+  UserService --> UserPreferenceRepository
+  UserService --> JwtUtil
+}
+
+note bottom of User
+  v2 changes:
+  + displayName (shown publicly, different from username)
+  + bio (short user description)
+  + profilePictureUrl (URL to avatar image)
+  + isActive (soft delete / ban flag)
+  + updatedAt (track profile edits)
+  + Register now accepts initial interests
+end note
+
+@enduml
