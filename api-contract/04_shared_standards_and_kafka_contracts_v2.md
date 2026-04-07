@@ -1,4 +1,5 @@
-# API Contracts — Shared Standards & Kafka Event Contracts
+# API Contracts — Shared Standards & Kafka Event Contracts (v2)
+> v2 changes: video.uploaded gains thumbnailUrl + language, video.watched score formula updated with rewatch bonus, endpoint index updated with US-05 and VS-08 language filter.
 
 ---
 
@@ -33,6 +34,7 @@ Every error response across all services follows this exact format:
 | `UNAUTHORIZED` | 401 | JWT missing or malformed |
 | `TOKEN_EXPIRED` | 401 | JWT is valid but expired |
 | `FORBIDDEN` | 403 | Valid JWT but user lacks permission |
+| `ACCOUNT_INACTIVE` | 403 | Account has been deactivated |
 | `NOT_FOUND` | 404 | Generic — when specific code not available |
 | `VALIDATION_ERROR` | 400 | Request body or params failed validation |
 | `INTERNAL_ERROR` | 500 | Unhandled server exception |
@@ -53,7 +55,7 @@ JWT payload:
 }
 ```
 
-The `sub` field is the `userId`. Downstream services receive it as the `X-User-Id` header after gateway validation.
+The `sub` field is the `userId`. Downstream services receive it as the `X-User-Id` header after gateway validation. Services trust this header — they do not re-validate the JWT themselves.
 
 ### Pagination Format
 All paginated endpoints return:
@@ -66,12 +68,18 @@ All paginated endpoints return:
 }
 ```
 
+- `page`: zero-indexed
+- `size`: items per page, max 100
+- `totalElements`: total count across all pages
+- `data`: array of items for this page
+
 ---
 
 ## Part 2 — Kafka Event Contracts
 
 > These are not HTTP endpoints. They are the event payloads published to Aiven Kafka.
 > All messages are JSON. All topics use `String` key (userId or videoId) and `String` value (JSON payload).
+> All consumers are in `recommendation-group` consumer group.
 
 ---
 
@@ -109,6 +117,7 @@ All paginated endpoints return:
 - `completionPct < 0.20` → score = `0.1`
 - `0.20 <= completionPct <= 0.60` → score = `completionPct × 0.8`
 - `completionPct > 0.60` → score = `completionPct × 1.0`
+- If rewatch detected (userId + videoId already exists in interactions) → score += `0.2` bonus, eventType = `REWATCH`
 
 ---
 
@@ -176,7 +185,7 @@ All paginated endpoints return:
 
 ---
 
-### KE-04 — video.uploaded
+### KE-04 — video.uploaded (UPDATED in v2)
 
 **Topic:** `video.uploaded`
 **Producer:** video-service
@@ -190,6 +199,8 @@ All paginated endpoints return:
 | `description` | `string` | No | Video description |
 | `tags` | `array[string]` | Yes | Content tags |
 | `categoryId` | `string` | Yes | Category |
+| `thumbnailUrl` | `string` | Yes | **NEW v2** — thumbnail image URL, stored in item_factors |
+| `language` | `string` | Yes | **NEW v2** — ISO 639-1 language code, stored in item_factors |
 | `source` | `string (enum)` | Yes | `"own"` or `"youtube"` |
 | `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
 
@@ -201,56 +212,69 @@ All paginated endpoints return:
   "description": "A beginner-friendly walkthrough of Kafka concepts.",
   "tags": ["kafka", "backend", "distributed-systems"],
   "categoryId": "technology",
+  "thumbnailUrl": "https://pub-xxx.r2.dev/thumbnails/vid_k3m9p2x1.jpg",
+  "language": "en",
   "source": "own",
   "timestamp": "2024-11-01T10:35:00Z"
 }
 ```
 
 **Action by consumer:**
-- Creates or updates `item_factors` record with tag/category vector
+- Creates or updates `item_factors` record with tag/category/language vector
+- Stores `thumbnailUrl` in `item_factors` so recommendation-service can return it without calling video-service
 - Does **not** invalidate any user cache
 - Does **not** create an `interactions` row
 
 ---
 
-## Part 3 — Endpoint Index
+## Part 3 — Endpoint Index (v2)
 
 ### User Service
 
-| ID | Method | Path | Auth |
-|---|---|---|---|
-| US-01 | POST | `/users/register` | No |
-| US-02 | POST | `/users/login` | No |
-| US-03 | GET | `/users/{userId}/profile` | Yes |
-| US-04 | PUT | `/users/{userId}/preferences` | Yes |
+| ID | Method | Path | Auth | v2 change |
+|---|---|---|---|---|
+| US-01 | POST | `/users/register` | No | Accepts `displayName` + `interests[]`, returns JWT |
+| US-02 | POST | `/users/login` | No | Returns `displayName` |
+| US-03 | GET | `/users/{userId}/profile` | Yes | Returns `displayName`, `bio`, `profilePictureUrl`, `isActive`, `updatedAt` |
+| US-04 | PUT | `/users/{userId}/preferences` | Yes | No change |
+| US-05 | PUT | `/users/{userId}/profile` | Yes | **NEW** — update displayName, bio, profilePictureUrl |
 
 ### Video Service
 
-| ID | Method | Path | Auth |
-|---|---|---|---|
-| VS-01 | POST | `/videos/init` | Yes |
-| VS-02 | PUT | `/videos/{videoId}/upload` | Yes |
-| VS-03 | GET | `/videos/{videoId}` | No |
-| VS-04 | GET | `/videos/user/{userId}` | No |
-| VS-05 | GET | `/videos/search` | No |
-| VS-06 | POST | `/videos/watch` | Yes |
-| VS-07 | POST | `/videos/{videoId}/like` | Yes |
-| VS-08 | GET | `/videos/catalog` | No |
-| VS-09 | POST | `/videos/search/click` | Yes |
+| ID | Method | Path | Auth | v2 change |
+|---|---|---|---|---|
+| VS-01 | POST | `/videos/init` | Yes | Accepts `language` field |
+| VS-02 | PUT | `/videos/{videoId}/upload` | Yes | Returns `thumbnailUrl` |
+| VS-03 | GET | `/videos/{videoId}` | No | Returns `thumbnailUrl`, `viewCount`, `likeCount`, `dislikeCount`, `language`, extended `status` enum |
+| VS-04 | GET | `/videos/user/{userId}` | No | Returns `thumbnailUrl`, `viewCount`, `likeCount` |
+| VS-05 | GET | `/videos/search` | No | Returns `thumbnailUrl`, `viewCount`, `likeCount`, `language` |
+| VS-06 | POST | `/videos/watch` | Yes | No change |
+| VS-07 | POST | `/videos/{videoId}/like` | Yes | Response includes updated `likeCount` + `dislikeCount` |
+| VS-08 | GET | `/videos/catalog` | No | Accepts `language` filter param, returns `thumbnailUrl`, `viewCount`, `likeCount`, `dislikeCount` |
+| VS-09 | POST | `/videos/search/click` | Yes | No change |
 
 ### Recommendation Service
 
-| ID | Method | Path | Auth |
-|---|---|---|---|
-| RS-01 | GET | `/recommendations/{userId}` | Yes |
-| RS-02 | GET | `/recommendations/similar/{videoId}` | No |
-| RS-03 | GET | `/recommendations/cold/{categoryId}` | No |
+| ID | Method | Path | Auth | v2 change |
+|---|---|---|---|---|
+| RS-01 | GET | `/recommendations/{userId}` | Yes | No change |
+| RS-02 | GET | `/recommendations/similar/{videoId}` | No | No change |
+| RS-03 | GET | `/recommendations/cold/{categoryId}` | No | No change |
 
 ### Kafka Topics
 
-| ID | Topic | Producer | Consumer |
-|---|---|---|---|
-| KE-01 | `video.watched` | video-service | recommendation-service |
-| KE-02 | `video.liked` | video-service | recommendation-service |
-| KE-03 | `user.searched` | video-service | recommendation-service |
-| KE-04 | `video.uploaded` | video-service | recommendation-service |
+| ID | Topic | Producer | Consumer | v2 change |
+|---|---|---|---|---|
+| KE-01 | `video.watched` | video-service | recommendation-service | Rewatch bonus +0.2 added to score formula |
+| KE-02 | `video.liked` | video-service | recommendation-service | No change |
+| KE-03 | `user.searched` | video-service | recommendation-service | No change |
+| KE-04 | `video.uploaded` | video-service | recommendation-service | Added `thumbnailUrl` + `language` fields |
+
+---
+
+## Part 4 — Version Changelog
+
+| Version | Date | Summary |
+|---|---|---|
+| v1 | Initial | All services, 4 Kafka topics, base endpoint index |
+| v2 | UML review | US-05 new endpoint, video responses gain thumbnailUrl + counts, video.uploaded gains thumbnailUrl + language, rewatch bonus in score formula, ACCOUNT_INACTIVE error code added |

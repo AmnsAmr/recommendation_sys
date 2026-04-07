@@ -2,7 +2,7 @@ services:
 
   # ── API Gateway ────────────────────────────────────────────────
   api-gateway:
-    build: ./backend/api-gateway
+    build: ./backend/api-gateway-service
     container_name: api-gateway
     ports:
       - "8080:8080"
@@ -75,33 +75,18 @@ services:
       KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      SVD_SIDECAR_URL: http://svd-sidecar:5000
       JWT_SECRET: ${JWT_SECRET}
       SERVER_PORT: 8083
     depends_on:
       - redis
-      - svd-sidecar
     networks:
       - platform-net
     restart: on-failure
 
   # ── SVD Python Sidecar ────────────────────────────────────────
-  svd-sidecar:
-    build: ./ml/svd-sidecar
-    container_name: svd-sidecar
-    ports:
-      - "5000:5000"
-    environment:
-      SUPABASE_DB_URL: ${SUPABASE_DB_URL_REC}
-      SUPABASE_DB_USERNAME: ${SUPABASE_DB_USERNAME}
-      SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-    networks:
-      - platform-net
-    restart: on-failure
-
   # ── Frontend ──────────────────────────────────────────────────
   frontend:
-    build: ./frontend/next-app
+    build: ./frontend/web-frontend
     container_name: frontend
     ports:
       - "3000:3000"
