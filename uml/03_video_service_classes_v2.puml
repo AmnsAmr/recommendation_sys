@@ -1,11 +1,11 @@
-@startuml Video Service — Class Diagram (v2)
+@startuml Video Service -- Class Diagram (v2)
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 skinparam ClassBorderColor #888888
 skinparam ClassBackgroundColor #F8F8F8
 
-title Video Service — Class Diagram (v2)
+title Video Service -- Class Diagram (v2)
 
 package "video-service" {
 
@@ -69,6 +69,16 @@ package "video-service" {
       - completionPct: Double
       - rewatchCount: Integer
       - source: VideoSource
+      - createdAt: LocalDateTime
+    }
+
+    class OutboxEvent {
+      - id: UUID
+      - aggregateType: String
+      - aggregateId: String
+      - topic: String
+      - payload: String
+      - status: String
       - createdAt: LocalDateTime
     }
 
@@ -138,7 +148,7 @@ package "video-service" {
       + uploadFile(videoId: String, token: String, file: MultipartFile): ResponseEntity<VideoResponse>
       + getVideo(videoId: String): ResponseEntity<VideoResponse>
       + getUserVideos(userId: UUID, page: int, size: int): ResponseEntity<Page<VideoResponse>>
-      + getCatalog(categoryId: String, source: String, page: int, size: int): ResponseEntity<Page<VideoResponse>>
+      + getCatalog(categoryId: String, source: String, language: String, page: int, size: int): ResponseEntity<Page<VideoResponse>>
       + search(q: String, page: int, size: int): ResponseEntity<Page<VideoResponse>>
       + recordWatch(request: WatchRequest): ResponseEntity<Void>
       + likeVideo(videoId: String, request: LikeRequest): ResponseEntity<VideoResponse>
@@ -151,20 +161,18 @@ package "video-service" {
       - videoRepository: VideoRepository
       - watchSessionRepository: WatchSessionRepository
       - uploadTokenRepository: UploadTokenRepository
+      - outboxEventRepository: OutboxEventRepository
       - storageService: StorageService
-      - kafkaProducer: VideoEventProducer
       - youTubeService: YouTubeService
       + initUpload(request: VideoUploadInitRequest, uploaderId: UUID): VideoUploadInitResponse
       + uploadFile(videoId: String, token: UUID, file: MultipartFile): Video
       + getVideoById(id: String): Video
       + getVideosByUploader(uploaderId: UUID, page: int, size: int): Page<Video>
-      + getCatalog(categoryId: String, source: String, page: int, size: int): Page<Video>
+      + getCatalog(categoryId: String, source: String, language: String, page: int, size: int): Page<Video>
       + searchVideos(q: String, page: int, size: int): Page<Video>
       + recordWatchSession(request: WatchRequest, userId: UUID): void
       + likeVideo(videoId: String, userId: UUID, action: String): Video
       + recordSearchClick(request: SearchClickRequest, userId: UUID): void
-      - incrementViewCount(videoId: String): void
-      - updateLikeCount(videoId: String, action: String): void
     }
 
     class StorageService {
@@ -191,6 +199,12 @@ package "video-service" {
       + publishVideoLiked(userId: UUID, videoId: String, action: String): void
       + publishUserSearched(userId: UUID, request: SearchClickRequest): void
     }
+
+    class OutboxPublisher {
+      - outboxEventRepository: OutboxEventRepository
+      - videoEventProducer: VideoEventProducer
+      + publishPendingEvents(): void
+    }
   }
 
   package "repository" {
@@ -199,7 +213,11 @@ package "video-service" {
       + findByUploaderId(uploaderId: UUID, pageable: Pageable): Page<Video>
       + findByStatus(status: VideoStatus, pageable: Pageable): Page<Video>
       + findByCategoryId(categoryId: String, pageable: Pageable): Page<Video>
+      + findByCategoryIdAndSourceAndLanguage(categoryId: String, source: VideoSource, language: String, pageable: Pageable): Page<Video>
       + findByTitleContainingOrTagsContaining(title: String, tag: String, pageable: Pageable): Page<Video>
+      + incrementViewCount(id: String): void
+      + incrementLikeCount(id: String): void
+      + incrementDislikeCount(id: String): void
     }
 
     interface WatchSessionRepository {
@@ -211,15 +229,23 @@ package "video-service" {
       + findByToken(token: UUID): Optional<UploadToken>
       + findByVideoIdAndUsed(videoId: String, used: boolean): Optional<UploadToken>
     }
+
+    interface OutboxEventRepository {
+      + save(event: OutboxEvent): OutboxEvent
+      + findPending(limit: int): List<OutboxEvent>
+      + markPublished(id: UUID): void
+    }
   }
 
   VideoController --> VideoService
   VideoService --> VideoRepository
   VideoService --> WatchSessionRepository
   VideoService --> UploadTokenRepository
+  VideoService --> OutboxEventRepository
   VideoService --> StorageService
   VideoService --> YouTubeService
-  VideoService --> VideoEventProducer
+  OutboxPublisher --> OutboxEventRepository
+  OutboxPublisher --> VideoEventProducer
 }
 
 note bottom of Video
@@ -233,15 +259,21 @@ note bottom of Video
 end note
 
 note bottom of WatchSession
-  NEW entity — tracks each individual watch event.
+  NEW entity -- tracks each individual watch event.
   rewatchCount: how many times this user watched this video.
   Rewatch = very strong positive signal for recommendation.
 end note
 
 note bottom of UploadToken
-  NEW entity — persists upload tokens in DB.
+  NEW entity -- persists upload tokens in DB.
   Allows validation without in-memory state.
   Survives service restart.
+end note
+
+note bottom of OutboxEvent
+  Transactional outbox:
+  write event in same DB transaction,
+  publish via OutboxPublisher after commit.
 end note
 
 @enduml

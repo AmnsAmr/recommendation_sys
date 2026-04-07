@@ -13,7 +13,7 @@
 | Service | user-service |
 | HTTP Method | `POST` |
 | URL Path | `/users/register` |
-| Description | Creates a new user account. Accepts initial interests from signup form for immediate cold start recommendations. Returns JWT so user is logged in immediately after registering. |
+| Description | Creates a new user account. Accepts initial interests from signup form for immediate cold start recommendations. Returns JWT so user is logged in immediately after registering. Emits `user.registered` Kafka event. |
 
 ### Request
 
@@ -268,7 +268,7 @@ Authorization: Bearer {jwt_token}
 | Service | user-service |
 | HTTP Method | `PUT` |
 | URL Path | `/users/{userId}/preferences` |
-| Description | Replaces all category preferences for a user. Full replace — previous preferences deleted. |
+| Description | Replaces all category preferences for a user. Full replace -- previous preferences deleted. Emits `user.prefs.updated` Kafka event. |
 
 ### Request
 

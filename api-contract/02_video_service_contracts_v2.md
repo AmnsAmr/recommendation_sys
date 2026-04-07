@@ -93,7 +93,7 @@ Content-Type: application/json
 | Service | video-service |
 | HTTP Method | `PUT` |
 | URL Path | `/videos/{videoId}/upload` |
-| Description | Uploads the actual video file to R2 storage. Sets status to READY. Publishes `video.uploaded` Kafka event. |
+| Description | Uploads the actual video file to R2 storage. Sets status to READY. Publishes `video.uploaded` after DB commit (transactional outbox or AFTER_COMMIT listener). |
 
 ### Request
 
@@ -383,7 +383,7 @@ X-Upload-Token: {uploadToken}
 | Service | video-service |
 | HTTP Method | `POST` |
 | URL Path | `/videos/watch` |
-| Description | Records a watch session. Increments viewCount. Publishes `video.watched` Kafka event. |
+| Description | Records a watch_session row and atomically increments viewCount. Publishes `video.watched` after commit; item_factors.view_count is updated by recommendation-service from this event. |
 
 ### Request
 
@@ -448,7 +448,7 @@ Content-Type: application/json
 | Service | video-service |
 | HTTP Method | `POST` |
 | URL Path | `/videos/{videoId}/like` |
-| Description | Records a like or dislike. Updates likeCount / dislikeCount counters. Publishes `video.liked` Kafka event. |
+| Description | Records a like or dislike. Atomically updates likeCount / dislikeCount counters. Publishes `video.liked` after commit. |
 
 ### Request
 

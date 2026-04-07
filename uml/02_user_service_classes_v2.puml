@@ -1,13 +1,22 @@
-@startuml User Service — Class Diagram (v2)
+@startuml User Service -- Class Diagram (v2)
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 skinparam ClassBorderColor #888888
 skinparam ClassBackgroundColor #F8F8F8
 
-title User Service — Class Diagram (v2)
+title User Service -- Class Diagram (v2)
 
 package "user-service" {
+
+  package "kafka" {
+    class UserEventPublisher {
+      - kafkaTemplate: KafkaTemplate<String, Object>
+      + publishUserRegistered(event: UserRegisteredEvent): void
+      + publishUserDeactivated(event: UserDeactivatedEvent): void
+      + publishPreferencesUpdated(event: UserPreferencesUpdatedEvent): void
+    }
+  }
 
   package "model" {
     class User {
@@ -81,6 +90,29 @@ package "user-service" {
     }
   }
 
+  package "event" {
+    class UserRegisteredEvent {
+      + eventId: UUID
+      + userId: UUID
+      + username: String
+      + interests: List<String>
+      + timestamp: Instant
+    }
+
+    class UserDeactivatedEvent {
+      + eventId: UUID
+      + userId: UUID
+      + timestamp: Instant
+    }
+
+    class UserPreferencesUpdatedEvent {
+      + eventId: UUID
+      + userId: UUID
+      + preferences: List<String>
+      + timestamp: Instant
+    }
+  }
+
   package "controller" {
     class UserController {
       - userService: UserService
@@ -98,6 +130,7 @@ package "user-service" {
       - preferenceRepository: UserPreferenceRepository
       - jwtUtil: JwtUtil
       - passwordEncoder: PasswordEncoder
+      - eventPublisher: UserEventPublisher
       + register(request: RegisterRequest): AuthResponse
       + login(request: LoginRequest): AuthResponse
       + getUserById(id: UUID): User
@@ -135,6 +168,7 @@ package "user-service" {
   UserService --> UserRepository
   UserService --> UserPreferenceRepository
   UserService --> JwtUtil
+  UserService --> UserEventPublisher
 }
 
 note bottom of User
@@ -145,6 +179,12 @@ note bottom of User
   + isActive (soft delete / ban flag)
   + updatedAt (track profile edits)
   + Register now accepts initial interests
+end note
+
+note bottom of UserService
+  User events are published after commit:
+  user.registered, user.deactivated,
+  user.prefs.updated.
 end note
 
 @enduml

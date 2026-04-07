@@ -1,9 +1,9 @@
-# API Contracts — Shared Standards & Kafka Event Contracts (v2)
-> v2 changes: video.uploaded gains thumbnailUrl + language, video.watched score formula updated with rewatch bonus, endpoint index updated with US-05 and VS-08 language filter.
+# API Contracts -- Shared Standards & Kafka Event Contracts (v2)
+> v2 changes: video.uploaded gains thumbnailUrl + language, user lifecycle topics added, idempotent event processing + DLQ defined, pagination envelope clarified, internal trust boundary documented.
 
 ---
 
-## Part 1 — Global Standards
+## Part 1 -- Global Standards
 
 ### Standard Error Format
 Every error response across all services follows this exact format:
@@ -25,7 +25,7 @@ Every error response across all services follows this exact format:
 
 - `code`: uppercase snake_case string, machine-readable
 - `message`: English human-readable string, safe to display
-- `details`: array of field-level issues — empty array `[]` when not applicable
+- `details`: array of field-level issues -- empty array `[]` when not applicable
 
 ### Global Error Codes
 
@@ -35,7 +35,7 @@ Every error response across all services follows this exact format:
 | `TOKEN_EXPIRED` | 401 | JWT is valid but expired |
 | `FORBIDDEN` | 403 | Valid JWT but user lacks permission |
 | `ACCOUNT_INACTIVE` | 403 | Account has been deactivated |
-| `NOT_FOUND` | 404 | Generic — when specific code not available |
+| `NOT_FOUND` | 404 | Generic -- when specific code not available |
 | `VALIDATION_ERROR` | 400 | Request body or params failed validation |
 | `INTERNAL_ERROR` | 500 | Unhandled server exception |
 
@@ -55,10 +55,17 @@ JWT payload:
 }
 ```
 
-The `sub` field is the `userId`. Downstream services receive it as the `X-User-Id` header after gateway validation. Services trust this header — they do not re-validate the JWT themselves.
+The `sub` field is the `userId`. Downstream services receive it as the `X-User-Id` header after gateway validation.
+
+Internal trust boundary (must enforce at least one option):
+1. Gateway adds `X-Internal-Token` (shared secret). Services verify it.
+2. mTLS between gateway and services.
+3. Services re-validate the JWT independently.
+
+Direct service ports must not be exposed publicly.
 
 ### Pagination Format
-All paginated endpoints return:
+All paginated endpoints return a pagination envelope:
 ```json
 {
   "page": 0,
@@ -72,18 +79,34 @@ All paginated endpoints return:
 - `size`: items per page, max 100
 - `totalElements`: total count across all pages
 - `data`: array of items for this page
+- If a resource-specific key is used (for example `videos`, `videoIds`), it must be explicitly documented in that endpoint contract.
+
+### Event Processing Requirements
+All Kafka events include an `eventId` and must be processed idempotently.
+1. Consumers check `processed_events` by `eventId` and return early if it exists.
+2. If processing succeeds, insert `processed_events(event_id, processed_at)`.
+3. Configure retries + DLT per topic, and publish failures to a DLQ topic.
+
+DLQ topics:
+1. `video.watched.dlq`
+2. `video.liked.dlq`
+3. `user.searched.dlq`
+4. `video.uploaded.dlq`
+5. `user.registered.dlq`
+6. `user.deactivated.dlq`
+7. `user.prefs.updated.dlq`
 
 ---
 
-## Part 2 — Kafka Event Contracts
+## Part 2 -- Kafka Event Contracts
 
-> These are not HTTP endpoints. They are the event payloads published to Aiven Kafka.
+> These are not HTTP endpoints. They are the event payloads published to Kafka.
 > All messages are JSON. All topics use `String` key (userId or videoId) and `String` value (JSON payload).
 > All consumers are in `recommendation-group` consumer group.
 
 ---
 
-### KE-01 — video.watched
+### KE-01 -- video.watched
 
 **Topic:** `video.watched`
 **Producer:** video-service
@@ -96,7 +119,7 @@ All paginated endpoints return:
 | `videoId` | `string` | Yes | Video that was watched |
 | `watchDuration` | `integer` | Yes | Seconds actually watched |
 | `videoDuration` | `integer` | Yes | Total video length in seconds |
-| `completionPct` | `number (float)` | Yes | 0.0–1.0 ratio watched |
+| `completionPct` | `number (float)` | Yes | 0.0-1.0 ratio watched |
 | `source` | `string (enum)` | Yes | `"own"` or `"youtube"` |
 | `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
 
@@ -114,14 +137,19 @@ All paginated endpoints return:
 ```
 
 **Score computed by consumer:**
-- `completionPct < 0.20` → score = `0.1`
-- `0.20 <= completionPct <= 0.60` → score = `completionPct × 0.8`
-- `completionPct > 0.60` → score = `completionPct × 1.0`
-- If rewatch detected (userId + videoId already exists in interactions) → score += `0.2` bonus, eventType = `REWATCH`
+- `completionPct < 0.20` -> score = `0.1`
+- `0.20 <= completionPct <= 0.60` -> score = `completionPct x 0.8`
+- `completionPct > 0.60` -> score = `completionPct x 1.0`
+- If rewatch detected (userId + videoId already exists in interactions) -> score += `0.2` bonus, eventType = `REWATCH`
+
+**Action by consumer:**
+- Insert interaction
+- Update item_factors.view_count and global_score
+- Invalidate cache for userId
 
 ---
 
-### KE-02 — video.liked
+### KE-02 -- video.liked
 
 **Topic:** `video.liked`
 **Producer:** video-service
@@ -148,12 +176,12 @@ All paginated endpoints return:
 ```
 
 **Score computed by consumer:**
-- `action = "like"` → score = `+1.0`
-- `action = "dislike"` → score = `-1.0`
+- `action = "like"` -> score = `+1.0`
+- `action = "dislike"` -> score = `-1.0`
 
 ---
 
-### KE-03 — user.searched
+### KE-03 -- user.searched
 
 **Topic:** `user.searched`
 **Producer:** video-service
@@ -180,12 +208,12 @@ All paginated endpoints return:
 ```
 
 **Score computed by consumer:**
-- `clickedVideoId != null` → score = `+0.5` for clicked video
-- `clickedVideoId = null` → no interaction score recorded
+- `clickedVideoId != null` -> score = `+0.5` for clicked video
+- `clickedVideoId = null` -> no interaction score recorded
 
 ---
 
-### KE-04 — video.uploaded (UPDATED in v2)
+### KE-04 -- video.uploaded (UPDATED in v2)
 
 **Topic:** `video.uploaded`
 **Producer:** video-service
@@ -199,8 +227,8 @@ All paginated endpoints return:
 | `description` | `string` | No | Video description |
 | `tags` | `array[string]` | Yes | Content tags |
 | `categoryId` | `string` | Yes | Category |
-| `thumbnailUrl` | `string` | Yes | **NEW v2** — thumbnail image URL, stored in item_factors |
-| `language` | `string` | Yes | **NEW v2** — ISO 639-1 language code, stored in item_factors |
+| `thumbnailUrl` | `string` | Yes | NEW v2 -- thumbnail image URL, stored in item_factors |
+| `language` | `string` | Yes | NEW v2 -- ISO 639-1 language code, stored in item_factors |
 | `source` | `string (enum)` | Yes | `"own"` or `"youtube"` |
 | `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
 
@@ -222,12 +250,87 @@ All paginated endpoints return:
 **Action by consumer:**
 - Creates or updates `item_factors` record with tag/category/language vector
 - Stores `thumbnailUrl` in `item_factors` so recommendation-service can return it without calling video-service
-- Does **not** invalidate any user cache
-- Does **not** create an `interactions` row
+- Does not invalidate any user cache
+- Does not create an `interactions` row
 
 ---
 
-## Part 3 — Endpoint Index (v2)
+### KE-05 -- user.registered
+
+**Topic:** `user.registered`
+**Producer:** user-service
+**Consumer:** recommendation-service
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `eventId` | `string (UUID)` | Yes | Unique event ID |
+| `userId` | `string (UUID)` | Yes | New user ID |
+| `username` | `string` | Yes | Username |
+| `interests` | `array[string]` | Yes | Declared interests (category IDs) |
+| `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
+
+```json
+{
+  "eventId": "a5b6c7d8-e9f0-1234-abcd-567890123456",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "username": "alice_dev",
+  "interests": ["technology", "science", "programming"],
+  "timestamp": "2024-11-01T10:31:00Z"
+}
+```
+
+**Action by consumer:**
+- Insert one UserCategoryProfile per interest with `weight = 1.0` and `source = "declared"`
+
+---
+
+### KE-06 -- user.deactivated
+
+**Topic:** `user.deactivated`
+**Producer:** user-service
+**Consumer:** recommendation-service
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `eventId` | `string (UUID)` | Yes | Unique event ID |
+| `userId` | `string (UUID)` | Yes | Deactivated user ID |
+| `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
+
+```json
+{
+  "eventId": "b6c7d8e9-f012-3456-abcd-678901234567",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "timestamp": "2024-11-01T10:50:00Z"
+}
+```
+
+---
+
+### KE-07 -- user.prefs.updated
+
+**Topic:** `user.prefs.updated`
+**Producer:** user-service
+**Consumer:** recommendation-service
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `eventId` | `string (UUID)` | Yes | Unique event ID |
+| `userId` | `string (UUID)` | Yes | User ID |
+| `preferences` | `array[string]` | Yes | Updated preference categories |
+| `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
+
+```json
+{
+  "eventId": "c7d8e9f0-1234-5678-abcd-789012345678",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "preferences": ["technology", "science"],
+  "timestamp": "2024-11-01T10:55:00Z"
+}
+```
+
+---
+
+## Part 3 -- Endpoint Index (v2)
 
 ### User Service
 
@@ -237,7 +340,7 @@ All paginated endpoints return:
 | US-02 | POST | `/users/login` | No | Returns `displayName` |
 | US-03 | GET | `/users/{userId}/profile` | Yes | Returns `displayName`, `bio`, `profilePictureUrl`, `isActive`, `updatedAt` |
 | US-04 | PUT | `/users/{userId}/preferences` | Yes | No change |
-| US-05 | PUT | `/users/{userId}/profile` | Yes | **NEW** — update displayName, bio, profilePictureUrl |
+| US-05 | PUT | `/users/{userId}/profile` | Yes | NEW -- update displayName, bio, profilePictureUrl |
 
 ### Video Service
 
@@ -269,12 +372,15 @@ All paginated endpoints return:
 | KE-02 | `video.liked` | video-service | recommendation-service | No change |
 | KE-03 | `user.searched` | video-service | recommendation-service | No change |
 | KE-04 | `video.uploaded` | video-service | recommendation-service | Added `thumbnailUrl` + `language` fields |
+| KE-05 | `user.registered` | user-service | recommendation-service | NEW -- initial interests for cold start |
+| KE-06 | `user.deactivated` | user-service | recommendation-service | NEW |
+| KE-07 | `user.prefs.updated` | user-service | recommendation-service | NEW |
 
 ---
 
-## Part 4 — Version Changelog
+## Part 4 -- Version Changelog
 
 | Version | Date | Summary |
 |---|---|---|
 | v1 | Initial | All services, 4 Kafka topics, base endpoint index |
-| v2 | UML review | US-05 new endpoint, video responses gain thumbnailUrl + counts, video.uploaded gains thumbnailUrl + language, rewatch bonus in score formula, ACCOUNT_INACTIVE error code added |
+| v2 | UML review | User lifecycle topics added, video.uploaded gains thumbnailUrl + language, rewatch bonus in score formula, idempotent processing + DLQ defined, pagination clarified, ACCOUNT_INACTIVE error code added |

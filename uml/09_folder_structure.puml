@@ -3,7 +3,7 @@
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 
-title Monorepo — Folder Structure
+title Monorepo -- Folder Structure
 
 salt
 {
@@ -13,7 +13,7 @@ salt
     ++ .env.example                     | shared env vars template
     ++ README.md
     ++_ backend/
-    +++ user-service/                   | Spring Boot — port 8081
+    +++ user-service/                   | Spring Boot -- port 8081
     ++++ src/main/java/
     +++++ controller/
     +++++ service/
@@ -25,7 +25,7 @@ salt
     ++++ src/main/resources/
     +++++ application.yml
     ++++ pom.xml
-    +++ video-service/                  | Spring Boot — port 8082
+    +++ video-service/                  | Spring Boot -- port 8082
     ++++ src/main/java/
     +++++ controller/
     +++++ service/
@@ -36,22 +36,23 @@ salt
     ++++ src/main/resources/
     +++++ application.yml
     ++++ pom.xml
-    +++ recommendation-service/         | Spring Boot — port 8083
+    +++ recommendation-service/         | Spring Boot -- port 8083
     ++++ src/main/java/
     +++++ controller/
     +++++ service/
     +++++ repository/
     +++++ model/
+    +++++ dto/
     +++++ kafka/
     ++++ src/main/resources/
     +++++ application.yml
     ++++ pom.xml
-    +++ api-gateway/                    | Spring Cloud Gateway — port 8080
+    +++ api-gateway/                    | Spring Cloud Gateway -- port 8080
     ++++ src/main/resources/
     +++++ application.yml               | routing rules defined here
     ++++ pom.xml
     ++_ frontend/
-    +++ next-app/                       | Next.js + TypeScript — port 3000
+    +++ next-app/                       | Next.js + TypeScript -- port 3000
     ++++ app/
     +++++ page.tsx                      | homepage / recommendations
     +++++ upload/page.tsx
@@ -69,7 +70,7 @@ salt
     +++ requirements.txt
     ++_ uml/                            | PlantUML diagrams
     +++ 01_system_architecture.puml
-    +++ 02_user_service_classes.puml
+    +++ 02_user_service_classes_v2.puml
     +++ ...
   }
 }

@@ -1,9 +1,9 @@
-@startuml Database Schema — ERD (v2)
+@startuml Database Schema -- ERD (v2)
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 
-title Database Schema v2 — All Services (Supabase/PostgreSQL)
+title Database Schema v2 -- All Services (Supabase/PostgreSQL)
 
 note as N1
   One Supabase project, three schemas.
@@ -97,6 +97,18 @@ package "video_schema" #F0F8E8 {
     * created_at : TIMESTAMP
   }
 
+  entity "video_outbox" as outbox {
+    * id : UUID <<PK>>
+    --
+    * aggregate_type : VARCHAR
+    * aggregate_id : VARCHAR
+    * topic : VARCHAR
+    * payload : JSONB
+    * status : VARCHAR
+    * created_at : TIMESTAMP
+    published_at : TIMESTAMP
+  }
+
   videos ||--o{ tags : has
   videos }o--|| cats : belongs to
   videos ||--o{ sessions : tracked by
@@ -131,6 +143,8 @@ package "recommendation_schema" #F8F0F8 {
     vector : FLOAT[]
     * tags : TEXT[]
     * category_id : VARCHAR
+    * thumbnail_url : VARCHAR
+    * language : VARCHAR(10)
     * view_count : BIGINT = 0
     * global_score : FLOAT = 0
     * updated_at : TIMESTAMP
@@ -144,6 +158,12 @@ package "recommendation_schema" #F8F0F8 {
     * weight : FLOAT
     * source : ENUM(declared, inferred)
     * updated_at : TIMESTAMP
+  }
+
+  entity "processed_events" as pevents {
+    * event_id : VARCHAR <<PK>>
+    --
+    * processed_at : TIMESTAMP
   }
 }
 

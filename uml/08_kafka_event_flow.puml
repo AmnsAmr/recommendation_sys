@@ -3,7 +3,7 @@
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 
-title Kafka Event Flow — All Topics
+title Kafka Event Flow -- All Topics
 
 participant "User Service\n:8081" as us
 participant "Video Service\n:8082" as vs
@@ -11,27 +11,47 @@ queue "video.watched" as tw
 queue "video.liked" as tl
 queue "user.searched" as ts
 queue "video.uploaded" as tu
+queue "user.registered" as tur
+queue "user.deactivated" as tud
+queue "user.prefs.updated" as tup
 participant "Rec Service\n:8083" as rec
 
-note over tw, tu
+note over tw, tup
   All topics consumed exclusively
   by Recommendation Service
 end note
 
-vs -> tw : publish\n{\n  userId, videoId,\n  completionPct,\n  watchDuration,\n  timestamp\n}
+note over tw, tup
+  DLQ topics:
+  video.watched.dlq
+  video.liked.dlq
+  user.searched.dlq
+  video.uploaded.dlq
+  user.registered.dlq
+  user.deactivated.dlq
+  user.prefs.updated.dlq
+end note
 
-vs -> tl : publish\n{\n  userId, videoId,\n  action: like|dislike,\n  timestamp\n}
+us -> tur : publish\n{\n  eventId, userId,\n  username,\n  interests[],\n  timestamp\n}
+us -> tud : publish\n{\n  eventId, userId,\n  timestamp\n}
+us -> tup : publish\n{\n  eventId, userId,\n  preferences[],\n  timestamp\n}
 
-vs -> ts : publish\n{\n  userId, query,\n  resultVideoIds[],\n  clickedVideoId,\n  timestamp\n}
+vs -> tw : publish\n{\n  eventId, userId,\n  videoId,\n  completionPct,\n  watchDuration,\n  videoDuration,\n  source: own|youtube,\n  timestamp\n}
 
-vs -> tu : publish\n{\n  videoId, title,\n  tags[], categoryId,\n  source: own|youtube,\n  timestamp\n}
+vs -> tl : publish\n{\n  eventId, userId,\n  videoId,\n  action: like|dislike,\n  source: own|youtube,\n  timestamp\n}
 
-tw -> rec : consume\n→ score = completionPct\n→ INSERT interaction\n→ update SVD factors\n→ invalidate cache
+vs -> ts : publish\n{\n  eventId, userId,\n  query,\n  resultVideoIds[],\n  clickedVideoId,\n  timestamp\n}
 
-tl -> rec : consume\n→ score = like(1.0) | dislike(-1.0)\n→ INSERT interaction\n→ invalidate cache
+vs -> tu : publish\n{\n  eventId, videoId,\n  title, description,\n  tags[], categoryId,\n  thumbnailUrl,\n  language,\n  source: own|youtube,\n  timestamp\n}
 
-ts -> rec : consume\n→ score = 0.5 if clicked\n→ update content profile\n→ INSERT interaction
+tw -> rec : consume\n-> score = completionPct\n-> INSERT interaction\n-> update SVD factors\n-> update item_factors.view_count\n-> invalidate cache
 
-tu -> rec : consume\n→ INSERT item_factors\n→ build content index\n→ (no cache invalidation)
+tl -> rec : consume\n-> score = like(1.0) | dislike(-1.0)\n-> INSERT interaction\n-> invalidate cache
+
+ts -> rec : consume\n-> score = 0.5 if clicked\n-> update content profile\n-> INSERT interaction
+
+tu -> rec : consume\n-> INSERT item_factors\n-> build content index\n-> (no cache invalidation)
+
+tur -> rec : consume\n-> INSERT user_category_profiles\n-> source = declared\n-> weight = 1.0
 
 @enduml

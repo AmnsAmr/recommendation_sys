@@ -1,16 +1,18 @@
-@startuml Watch Event & Recommendation Update — Sequence Diagram
+@startuml Watch Event & Recommendation Update -- Sequence Diagram
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 skinparam SequenceArrowColor #555555
 skinparam SequenceBoxBorderColor #888888
 
-title Watch Event → Recommendation Update Flow
+title Watch Event -> Recommendation Update Flow
 
 actor "User" as user
 participant "Frontend\n(Next.js)" as fe
 participant "API Gateway\n:8080" as gw
 participant "Video Service\n:8082" as vs
+database "Video DB\n(Supabase)" as videoDb
+participant "Outbox Poller" as poller
 queue "Kafka" as kafka
 participant "Rec Service\n:8083" as rec
 database "Rec DB\n(Supabase)" as recDb
@@ -18,20 +20,31 @@ participant "Redis Cache" as redis
 
 user -> fe : watches video (plays in player)
 
-note over fe : Frontend tracks watch time\nevery 30s or on video end
+note over fe : Frontend tracks watch time\n(every 30s or on video end)
 
 fe -> gw : POST /videos/watch\n{ userId, videoId, watchDuration,\n  videoDuration, completionPct }
 gw -> vs : forward
-vs -> kafka : publish video.watched\n{ userId, videoId, completionPct,\n  watchDuration, timestamp }
+vs -> videoDb : INSERT watch_session\n+ UPDATE video.view_count (atomic)\n(same transaction)
+vs -> videoDb : INSERT outbox_event\n(topic=video.watched)\n(same transaction)
 vs --> gw : 200 OK
 gw --> fe : 200 OK
 
-kafka -> rec : consume video.watched
+poller -> videoDb : fetch pending outbox_event
+poller -> kafka : publish video.watched\n{ eventId, userId, videoId,\n  completionPct, watchDuration,\n  videoDuration, source,\n  timestamp }
+poller -> videoDb : mark outbox_event published
 
-rec -> rec : compute score\n(completionPct × 1.0)
+kafka -> rec : consume video.watched
+rec -> recDb : check processed_events\n(skip if eventId exists)
+rec -> rec : compute score\n(completionPct x 1.0, rewatch bonus)
 rec -> recDb : INSERT interaction\n{ userId, videoId, score }
+rec -> recDb : UPDATE item_factors.view_count\n+ global_score
 rec -> rec : update SVD user/item factors\n(incremental update)
 rec -> redis : invalidate cache\nfor this userId
+
+note over rec, recDb
+  Rewatch detection uses interactions in Rec DB
+  as the single source of truth.
+end note
 
 note over redis : Next homepage request\nwill recompute fresh\nrecommendations
 

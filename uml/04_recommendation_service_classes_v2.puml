@@ -1,11 +1,11 @@
-@startuml Recommendation Service — Class Diagram (v2)
+@startuml Recommendation Service -- Class Diagram (v2)
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 skinparam ClassBorderColor #888888
 skinparam ClassBackgroundColor #F8F8F8
 
-title Recommendation Service — Class Diagram (v2)
+title Recommendation Service -- Class Diagram (v2)
 
 package "recommendation-service" {
 
@@ -42,6 +42,8 @@ package "recommendation-service" {
       - vector: double[]
       - tags: List<String>
       - categoryId: String
+      - thumbnailUrl: String
+      - language: String
       - viewCount: Long
       - globalScore: Double
       - updatedAt: LocalDateTime
@@ -54,6 +56,11 @@ package "recommendation-service" {
       - weight: Double
       - source: String
       - updatedAt: LocalDateTime
+    }
+
+    class ProcessedEvent {
+      - eventId: String
+      - processedAt: LocalDateTime
     }
 
     UserFactor "1" --> "1" UserCategoryProfile : cold start source
@@ -131,11 +138,13 @@ package "recommendation-service" {
       - interactionRepository: InteractionRepository
       - itemFactorRepository: ItemFactorRepository
       - userCategoryProfileRepository: UserCategoryProfileRepository
+      - processedEventRepository: ProcessedEventRepository
       - cacheService: RecommendationCacheService
       + onVideoWatched(event: VideoWatchedEvent): void
       + onVideoLiked(event: VideoLikedEvent): void
       + onUserSearched(event: UserSearchedEvent): void
       + onVideoUploaded(event: VideoUploadedEvent): void
+      + onUserRegistered(event: UserRegisteredEvent): void
       - toScore(completionPct: Double, isRewatch: boolean): Double
       - detectRewatch(userId: UUID, videoId: String): boolean
     }
@@ -177,7 +186,17 @@ package "recommendation-service" {
         + description: String
         + tags: List<String>
         + categoryId: String
+        + thumbnailUrl: String
+        + language: String
         + source: String
+        + timestamp: String
+      }
+
+      class UserRegisteredEvent {
+        + eventId: String
+        + userId: UUID
+        + username: String
+        + interests: List<String>
         + timestamp: String
       }
     }
@@ -208,6 +227,11 @@ package "recommendation-service" {
       + deleteByUserId(userId: UUID): void
       + save(profile: UserCategoryProfile): UserCategoryProfile
     }
+
+    interface ProcessedEventRepository {
+      + existsByEventId(eventId: String): boolean
+      + save(event: ProcessedEvent): ProcessedEvent
+    }
   }
 
   package "config" {
@@ -231,6 +255,7 @@ package "recommendation-service" {
   RecommendationEventConsumer --> InteractionRepository
   RecommendationEventConsumer --> ItemFactorRepository
   RecommendationEventConsumer --> UserCategoryProfileRepository
+  RecommendationEventConsumer --> ProcessedEventRepository
   RecommendationEventConsumer --> RecommendationCacheService
   ContentBasedService --> ItemFactorRepository
 }
@@ -244,22 +269,22 @@ end note
 
 note bottom of ItemFactor
   v2 changes:
+  + thumbnailUrl + language for cold start and similar videos
   + viewCount (global popularity for cold start ranking)
   + globalScore (pre-computed popularity score, updated on each watch)
   Used for: cold start recommendations when no user history
 end note
 
 note bottom of UserCategoryProfile
-  NEW entity — stores declared interests from signup form.
+  NEW entity -- stores declared interests from signup form.
   source field: "declared" (from signup) or "inferred" (from behavior).
   Drives cold start. When user has < 5 interactions,
   recommendations are based on this profile.
 end note
 
 note bottom of RecommendationEventConsumer
-  detectRewatch(): checks if userId + videoId already
-  exists in interactions. If yes, score gets a +0.2 bonus.
-  Rewatch is the strongest positive implicit signal.
+  Idempotency: skip if eventId exists in processed_events.
+  Failed processing routes to per-topic DLQ.
 end note
 
 @enduml

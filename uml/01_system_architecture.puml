@@ -5,7 +5,7 @@ skinparam defaultFontName Arial
 skinparam ArrowColor #555555
 skinparam componentBorderColor #888888
 
-title Video Platform — System Architecture
+title Video Platform -- System Architecture
 
 actor "User" as user
 
@@ -13,7 +13,7 @@ package "Frontend" {
   [Next.js / React + TypeScript\nport 3000] as frontend
 }
 
-package "Backend — Spring Boot Microservices" {
+package "Backend -- Spring Boot Microservices" {
   [API Gateway\nSpring Cloud Gateway\nport 8080] as gateway
 
   [User Service\nport 8081] as userSvc
@@ -22,7 +22,7 @@ package "Backend — Spring Boot Microservices" {
 }
 
 package "Event Bus" {
-  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded" as kafka
+  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded\nuser.registered\nuser.deactivated\nuser.prefs.updated" as kafka
 }
 
 package "Storage" {
@@ -42,6 +42,13 @@ frontend --> gateway : REST / HTTPS
 gateway --> userSvc : route /users/**
 gateway --> videoSvc : route /videos/**
 gateway --> recSvc : route /recommendations/**
+
+note right of gateway
+  Trust boundary: services only accept
+  requests from the gateway and verify
+  an internal auth signal (X-Internal-Token
+  or mTLS). Direct service ports are not exposed.
+end note
 
 userSvc --> userDb
 videoSvc --> videoDb

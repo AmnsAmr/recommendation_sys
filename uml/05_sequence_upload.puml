@@ -1,11 +1,11 @@
-@startuml Video Upload — Sequence Diagram
+@startuml Video Upload -- Sequence Diagram
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
 skinparam SequenceArrowColor #555555
 skinparam SequenceBoxBorderColor #888888
 
-title Video Upload Flow
+title Video Upload Flow (Transactional Outbox)
 
 actor "User" as user
 participant "Frontend\n(Next.js)" as fe
@@ -13,26 +13,30 @@ participant "API Gateway\n:8080" as gw
 participant "Video Service\n:8082" as vs
 participant "S3 / R2\nStorage" as s3
 database "Video DB\n(Supabase)" as db
+participant "Outbox Poller" as poller
 queue "Kafka" as kafka
 participant "Rec Service\n:8083" as rec
 
 user -> fe : selects video file + metadata
 
-fe -> gw : POST /videos/init\n{title, description, tags, categoryId}
+fe -> gw : POST /videos/init\n{title, description, tags, categoryId, language}
 gw -> vs : forward request (JWT validated)
 vs -> db : INSERT video (status=PENDING)
 vs --> gw : { videoId, uploadToken }
 gw --> fe : { videoId, uploadToken }
 
 fe -> vs : PUT /videos/{videoId}/upload\nMultipart file + uploadToken
-note right of fe : File goes directly to\nvideo service, bypassing\nnothing sensitive
+note right of fe : File goes directly to\nvideo service
 
 vs -> s3 : upload file stream
 s3 --> vs : s3Key / file URL
-vs -> db : UPDATE video SET status=READY, s3Key=...
+vs -> db : UPDATE video SET status=READY,\n  s3Key=..., thumbnailUrl=...
+vs -> db : INSERT outbox_event\n(topic=video.uploaded, payload=...)\n(same transaction)
 vs --> fe : { videoId, status: "READY" }
 
-vs -> kafka : publish video.uploaded\n{ videoId, title, tags, categoryId, source }
+poller -> db : fetch pending outbox_event
+poller -> kafka : publish video.uploaded\n{ eventId, videoId, title,\n  tags, categoryId, thumbnailUrl,\n  language, source, timestamp }
+poller -> db : mark outbox_event published
 
 kafka -> rec : consume video.uploaded
 rec -> rec : add to content-based index\n(ItemFactor record)
