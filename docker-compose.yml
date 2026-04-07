@@ -1,6 +1,6 @@
 services:
 
-  # ── API Gateway ────────────────────────────────────────────────
+  # API Gateway
   api-gateway:
     build: ./backend/api-gateway-service
     container_name: api-gateway
@@ -21,7 +21,7 @@ services:
       - platform-net
     restart: on-failure
 
-  # ── User Service ───────────────────────────────────────────────
+  # User Service
   user-service:
     build: ./backend/user-service
     container_name: user-service
@@ -40,7 +40,7 @@ services:
       - platform-net
     restart: on-failure
 
-  # ── Video Service ──────────────────────────────────────────────
+  # Video Service
   video-service:
     build: ./backend/video-service
     container_name: video-service
@@ -66,7 +66,7 @@ services:
       - platform-net
     restart: on-failure
 
-  # ── Recommendation Service ────────────────────────────────────
+  # Recommendation Service
   recommendation-service:
     build: ./backend/recommendation-service
     container_name: recommendation-service
@@ -83,6 +83,7 @@ services:
       KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      SVD_SIDECAR_URL: ${SVD_SIDECAR_URL}
       JWT_SECRET: ${JWT_SECRET}
       SERVER_PORT: 8083
     depends_on:
@@ -91,8 +92,24 @@ services:
       - platform-net
     restart: on-failure
 
-  # ── SVD Python Sidecar ────────────────────────────────────────
-  # ── Frontend ──────────────────────────────────────────────────
+  # SVD Python Sidecar (FastAPI)
+  svd-sidecar:
+    build: ./backend/svd-sidecar
+    container_name: svd-sidecar
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${SUPABASE_DB_URL_REC}
+      DATABASE_USERNAME: ${SUPABASE_DB_USERNAME}
+      DATABASE_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      PORT: 8000
+    networks:
+      - platform-net
+    restart: on-failure
+
+  # Frontend
   frontend:
     build: ./frontend/web-frontend
     container_name: frontend
@@ -108,7 +125,7 @@ services:
       - platform-net
     restart: on-failure
 
-  # ── Redis ─────────────────────────────────────────────────────
+  # Redis
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -121,11 +138,9 @@ services:
     restart: on-failure
     command: redis-server --appendonly yes
 
-# ── Volumes ────────────────────────────────────────────────────
 volumes:
   redis-data:
 
-# ── Networks ───────────────────────────────────────────────────
 networks:
   platform-net:
     driver: bridge
