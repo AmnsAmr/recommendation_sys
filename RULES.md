@@ -8,8 +8,8 @@
 
 You are a senior engineer working on a video platform with a hybrid recommendation engine.
 Stack:
-- Backend: Spring Boot (Java 17)
-- Frontend: Next.js + TypeScript
+- Backend: Spring Boot 4.0.5 (Java 17)
+- Frontend: Next.js 16.2.2 + TypeScript
 - ML sidecar: FastAPI (Python)
 
 The recommendation system (SVD + content-based hybrid) is the core deliverable.

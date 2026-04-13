@@ -11,67 +11,66 @@ salt
     + video-platform/                   | root monorepo
     ++ docker-compose.yml               | runs everything locally
     ++ .env.example                     | shared env vars template
-    ++ README.md
+    ++ RULES.md
+    ++ AGENT.md
     ++_ backend/
-    +++ user-service/                   | Spring Boot -- port 8081
-    ++++ src/main/java/
-    +++++ controller/
-    +++++ service/
-    +++++ repository/
-    +++++ model/
-    +++++ dto/
-    +++++ security/
-    +++++ kafka/
+    +++ api-gateway-service/            | Spring Cloud Gateway -- port 8080
+    ++++ src/main/java/org/vidrec/apigatewayservice/
+    +++++ filter/
+    +++++ config/
     ++++ src/main/resources/
-    +++++ application.yml
+    +++++ application.properties
+    ++++ pom.xml
+    +++ user-service/                   | Spring Boot -- port 8081
+    ++++ src/main/java/org/vidrec/userservice/
+    +++++ user/
+    +++++ preference/
+    +++++ event/
+    +++++ kafka/
+    +++++ security/
+    +++++ config/
+    ++++ src/main/resources/
+    +++++ application.properties
     ++++ pom.xml
     +++ video-service/                  | Spring Boot -- port 8082
-    ++++ src/main/java/
-    +++++ controller/
-    +++++ service/
-    +++++ repository/
-    +++++ model/
-    +++++ dto/
+    ++++ src/main/java/org/vidrec/videoservice/
+    +++++ video/
+    +++++ watch/
+    +++++ catalog/
+    +++++ youtube/
+    +++++ storage/
     +++++ kafka/
+    +++++ outbox/
+    +++++ config/
     ++++ src/main/resources/
-    +++++ application.yml
+    +++++ application.properties
     ++++ pom.xml
     +++ recommendation-service/         | Spring Boot -- port 8083
-    ++++ src/main/java/
-    +++++ controller/
-    +++++ service/
-    +++++ repository/
+    ++++ src/main/java/org/vidrec/recommendationservice/
+    +++++ recommendation/
+    +++++ interaction/
     +++++ model/
-    +++++ dto/
+    +++++ content/
+    +++++ cache/
     +++++ kafka/
+    +++++ config/
     ++++ src/main/resources/
-    +++++ application.yml
+    +++++ application.properties
     ++++ pom.xml
-    +++ api-gateway/                    | Spring Cloud Gateway -- port 8080
-    ++++ src/main/resources/
-    +++++ application.yml               | routing rules defined here
-    ++++ pom.xml
-    ++_ frontend/
-    +++ next-app/                       | Next.js + TypeScript -- port 3000
+    +++ svd-sidecar/                    | FastAPI -- port 8000
     ++++ app/
-    +++++ page.tsx                      | homepage / recommendations
-    +++++ upload/page.tsx
-    +++++ watch/[id]/page.tsx
+    ++++ requirements.txt
+    ++++ Dockerfile
+    ++_ frontend/
+    +++ web-frontend/                   | Next.js + TypeScript -- port 3000
+    ++++ app/
     ++++ components/
-    +++++ VideoCard.tsx
-    +++++ VideoPlayer.tsx
-    +++++ RecommendationFeed.tsx
     ++++ lib/
-    +++++ api.ts                        | all API call functions
-    ++++ public/
+    ++++ hooks/
     ++++ package.json
-    ++_ ml/                             | optional Python scripts
-    +++ svd_train.py                    | offline SVD retraining
-    +++ requirements.txt
-    ++_ uml/                            | PlantUML diagrams
-    +++ 01_system_architecture.puml
-    +++ 02_user_service_classes_v2.puml
-    +++ ...
+    ++_ api-contract/
+    ++_ uml/
+    ++_ prompts/
   }
 }
 @enduml
