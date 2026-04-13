@@ -1,4 +1,4 @@
-# RULES.md — Video Platform Monorepo
+# RULES.md -- Video Platform Monorepo
 > Read this file before touching any code in this repository.
 > These rules apply to every agent, every session, every service.
 
@@ -6,73 +6,61 @@
 
 ## 1. Who You Are
 
-You are a senior backend engineer working on a **video platform with a hybrid recommendation engine**.
-The stack is **Spring Boot 3 (Java 17)** for all backend services, **Next.js 14 + TypeScript** for the frontend.
-The recommendation system (SVD + content-based hybrid) is the **core deliverable** — treat it with the most care.
+You are a senior engineer working on a video platform with a hybrid recommendation engine.
+Stack:
+- Backend: Spring Boot (Java 17)
+- Frontend: Next.js + TypeScript
+- ML sidecar: FastAPI (Python)
 
-The team has 4 members. Code must be clean enough for teammates to read without asking questions.
+The recommendation system (SVD + content-based hybrid) is the core deliverable.
+Code must be clear enough for teammates to read without back-and-forth.
 
 ---
 
 ## 2. Architecture Rules (Non-Negotiable)
 
-### 2.1 Package Structure — Feature First
-Every Spring Boot service uses **package-by-feature**, not package-by-layer.
+### 2.1 Package Structure -- Feature First
+Every Spring Boot service uses package-by-feature, not package-by-layer.
 
 ```
-com.platform.{service-name}
-  ├── {feature}/
-  │     ├── {Feature}Controller.java
-  │     ├── {Feature}Service.java
-  │     ├── {Feature}Repository.java
-  │     ├── {Feature}.java              ← entity
-  │     ├── {Feature}Request.java       ← inbound DTO
-  │     └── {Feature}Response.java      ← outbound DTO
-  ├── kafka/
-  │     ├── {Feature}EventProducer.java
-  │     └── {Feature}EventConsumer.java
-  ├── config/
-  │     ├── SecurityConfig.java
-  │     ├── KafkaConfig.java
-  │     └── RedisConfig.java
-  └── shared/
-        ├── exception/
-        └── util/
+org.vidrec.{service}
+  |-- {feature}/
+  |   |-- {Feature}Controller.java
+  |   |-- {Feature}Service.java
+  |   |-- {Feature}Repository.java
+  |   |-- {Feature}.java              <- entity
+  |   |-- {Feature}Request.java       <- inbound DTO
+  |   `-- {Feature}Response.java      <- outbound DTO
+  |-- kafka/
+  |-- config/
+  `-- shared/
 ```
 
-**Never** create a flat `controller/`, `service/`, `repository/` structure at the top level.
-If you are about to do this, stop and reorganize into features first.
+Never create a flat controller/service/repository structure at the top level.
 
 ### 2.2 No Cross-Service HTTP Calls
-Services **never** call each other via HTTP in the backend.
-- Inter-service communication = **Kafka only**
-- If you need data from another service, either:
-  - Have the frontend make two calls and merge client-side
-  - Denormalize the data via a Kafka event into the consuming service's DB
+Spring Boot services never call each other over HTTP.
+- Inter-service communication = Kafka only
+- If you need data from another service, denormalize it via events
 
-If you are about to write a `RestTemplate` or `WebClient` call from one service to another, **stop and use Kafka instead**.
+Exception:
+- recommendation-service may call svd-sidecar for ML scoring/training if needed.
 
 ### 2.3 DTOs Are Mandatory
-- **Never** return a JPA entity directly from a controller
-- Every controller returns a `*Response` DTO
-- Every controller receives a `*Request` DTO
-- Entities stay inside the service layer and below
-- Use `record` for DTOs when possible (Java 17)
-
-```java
-// ✅ CORRECT
-public record VideoResponse(String id, String title, String categoryId) {}
-
-// ❌ WRONG — never expose the entity
-@GetMapping("/{id}")
-public Video getVideo(@PathVariable String id) { ... }
-```
+- Never return a JPA entity from a controller
+- Every controller receives a Request DTO and returns a Response DTO
+- Use Java 17 records when possible
 
 ### 2.4 Each Service Owns Its Data
 - No shared database between services
 - No cross-schema JPA relationships
-- Each service has its own schema in Supabase
-- If service A needs data that lives in service B, that data must be replicated into service A's schema via a Kafka event
+- Each service owns one schema in Supabase
+- Data needed by other services must be replicated via Kafka events
+
+### 2.5 Publish Events After Commit
+All Kafka publishes must happen after DB commit.
+Use a transactional outbox or AFTER_COMMIT listener.
+No dual-write risk.
 
 ---
 
@@ -81,116 +69,101 @@ public Video getVideo(@PathVariable String id) { ... }
 ### 3.1 Topic Names (Immutable)
 | Topic | Producer | Consumer |
 |---|---|---|
-| `video.watched` | video-service | recommendation-service |
-| `video.liked` | video-service | recommendation-service |
-| `user.searched` | video-service | recommendation-service |
-| `video.uploaded` | video-service | recommendation-service |
+| video.watched | video-service | recommendation-service |
+| video.liked | video-service | recommendation-service |
+| user.searched | video-service | recommendation-service |
+| video.uploaded | video-service | recommendation-service |
+| user.registered | user-service | recommendation-service |
+| user.deactivated | user-service | recommendation-service |
+| user.prefs.updated | user-service | recommendation-service |
 
-**Never** create a new Kafka topic without adding it to this table.
-**Never** have a service consume a topic it doesn't own.
+Never create a new topic without updating this table.
 
 ### 3.2 Event Payload Format
-All Kafka messages are JSON. All events must include:
-- `eventId` — UUID, generated at publish time
-- `timestamp` — ISO-8601 string
-- The business fields specific to the event
+All Kafka messages are JSON and must include:
+- eventId (UUID)
+- timestamp (ISO-8601)
+- event-specific fields
 
-### 3.3 Consumer Error Handling
-Every Kafka consumer method must have a try-catch.
-On failure: log the error with the full event payload, do not rethrow (do not crash the consumer).
+### 3.3 Idempotency
+Every consumer must deduplicate by eventId:
+- If eventId exists in processed_events, skip
+- Otherwise process and insert processed_events(event_id, processed_at)
 
-```java
-@KafkaListener(topics = "video.watched")
-public void onVideoWatched(VideoWatchedEvent event) {
-    try {
-        recommendationService.processWatchEvent(event);
-    } catch (Exception e) {
-        log.error("Failed to process video.watched event: {}", event, e);
-    }
-}
-```
+### 3.4 Consumer Error Handling
+Every Kafka consumer must have try-catch.
+On failure: log error with full payload and do not crash the consumer.
 
 ---
 
 ## 4. Security Rules
 
-- All routes except `/users/register`, `/users/login`, `/videos/{id}` (GET), `/videos/catalog` (GET) require a valid JWT
-- JWT is validated at the **API Gateway** level — individual services trust the forwarded `X-User-Id` header
-- Passwords are always hashed with **bcrypt** — never store plain text
-- Never log passwords, tokens, or any PII
-- Never put secrets in code — use environment variables / `application.yml` placeholders
+- JWT is validated at the API Gateway
+- Downstream services trust X-User-Id
+- Services must only accept traffic from the gateway or verify an internal token
+- Passwords must be BCrypt hashed
+- Never log secrets or PII
+- Never hardcode secrets
 
 ---
 
 ## 5. Code Style Rules
 
 ### Java
-- Use `@Slf4j` (Lombok) for logging — never `System.out.println`
-- Use `Optional` properly — never call `.get()` without checking `.isPresent()`
-- Use `@RequiredArgsConstructor` (Lombok) for constructor injection — never `@Autowired` on fields
-- All service methods that can fail must throw a meaningful custom exception (in `shared/exception/`)
-- Return `ResponseEntity` from all controllers with explicit HTTP status codes
+- Use @Slf4j for logging
+- Prefer constructor injection (@RequiredArgsConstructor)
+- Never call Optional.get() without checking
+- Use ResponseEntity with explicit status codes
 
-### TypeScript (Frontend)
-- All API calls go through `lib/api.ts` — never call fetch/axios directly from a component
-- Use React Query for all server state — no `useState` + `useEffect` for fetching
-- All API response types must be typed — no `any`
-- Components go in `components/`, pages go in `app/`
+### TypeScript
+- All API calls go through lib/api.ts
+- Avoid any
 
 ---
 
-## 6. What to Do When the Codebase Is Too Large
+## 6. Large Codebase Rule
 
-If you cannot read the entire service in context:
-1. Read `AGENT.md` in that service's root folder first
-2. Read only the files relevant to the feature you are working on
-3. If no `AGENT.md` exists for that sub-service, **create one** before finishing your session (see Section 8)
+If a service is large:
+1. Read the service AGENT.md first
+2. Read only the relevant feature package
+3. If AGENT.md is missing or outdated, update it
 
 ---
 
 ## 7. Deviation Policy
 
-If asked to do something that breaks these rules:
-1. **Warn once** clearly: explain which rule is being broken and why it matters
-2. If the developer insists, do it — but add a `// FIXME: breaks RULES.md §X.X — [reason]` comment on the line
-3. Never silently break a rule without warning
+If asked to break rules:
+1. Warn once and explain why
+2. If the developer insists, do it but add a FIXME comment referencing RULES.md
 
 ---
 
-## 8. When to Create a Sub-Service AGENT.md
-
-Create or update a `AGENT.md` inside a service folder when:
-- The service has more than ~15 Java files
-- You have just implemented a significant feature
-- A new developer is about to work on that service
-- You notice the existing `AGENT.md` is outdated
-
-The sub-service `AGENT.md` format is defined in the root `AGENT.md`.
-
----
-
-## 9. Services at a Glance
+## 8. Services at a Glance
 
 | Service | Port | Language | Main job |
 |---|---|---|---|
-| `api-gateway` | 8080 | Spring Cloud Gateway | Route + validate JWT |
-| `user-service` | 8081 | Spring Boot / Java 17 | Auth, profiles, preferences |
-| `video-service` | 8082 | Spring Boot / Java 17 | Upload, catalog, YouTube API, Kafka producer |
-| `recommendation-service` | 8083 | Spring Boot / Java 17 | SVD + content hybrid, Kafka consumer, Redis cache |
-| `frontend` | 3000 | Next.js 14 / TypeScript | UI — feed, player, upload, search |
+| api-gateway-service | 8080 | Spring Cloud Gateway | Route + validate JWT |
+| user-service | 8081 | Spring Boot | Auth, profiles, preferences |
+| video-service | 8082 | Spring Boot | Upload, catalog, YouTube, Kafka producer |
+| recommendation-service | 8083 | Spring Boot | Hybrid recs, Kafka consumer, Redis |
+| svd-sidecar | 8000 | FastAPI | Model train/predict |
+| frontend | 3000 | Next.js | UI |
 
 ---
 
-## 10. Infrastructure at a Glance
+## 9. Infrastructure at a Glance
 
 | Tool | Purpose | Where |
 |---|---|---|
-| Supabase (PostgreSQL) | Database — 1 project, 3 schemas | Cloud (free tier) |
-| Aiven Kafka | Event bus — 4 topics | Cloud (free tier) |
-| Redis | Recommendation cache (TTL 10 min) | Docker (local) |
-| Cloudflare R2 | Video file storage | Cloud (free tier) |
-| YouTube Data API v3 | Seed video catalog | External |
-| Docker Compose | Run all services locally | Local |
+| Supabase (PostgreSQL) | DB -- 1 project, 3 schemas | Cloud |
+| Aiven Kafka | Event bus | Cloud |
+| Redis | Rec cache | Docker |
+| Cloudflare R2 | Video storage | Cloud |
+| YouTube Data API | Catalog seed | External |
+| Docker Compose | Local runtime | Local |
 
-Connection strings are **never** hardcoded. They live in `.env` (local) or environment variables (CI/prod).
-The `.env.example` file at the monorepo root documents all required variables.
+Connection strings are never hardcoded. See .env.example.
+
+Reference sources for accuracy:
+- `uml/` for architecture, flows, ERD, and folder structure diagrams
+- `api-contract/` for HTTP and Kafka contracts

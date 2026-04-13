@@ -40,6 +40,10 @@ video-platform/
 |-- uml/
 ```
 
+Primary references:
+- `uml/` for architecture, flows, ERD, and folder structure diagrams
+- `api-contract/` for HTTP and Kafka contracts
+
 ---
 
 ## How to Navigate This Codebase as an Agent
