@@ -1,124 +1,106 @@
-# AGENT.md — video-service
+# AGENT.md -- video-service
 > Read root RULES.md and root AGENT.md before this file.
 
 ---
 
 ## What This Service Does
 
-Handles everything video-related: upload to Cloudflare R2, metadata storage, YouTube API catalog sync,
-search, watch event recording, like/dislike recording, and publishing all four Kafka events.
-This service is the **main Kafka producer** — it is the source of all interaction signals.
+Handles uploads to Cloudflare R2, metadata storage, YouTube catalog sync,
+search, watch event recording, like/dislike recording, and publishing Kafka events.
+This service is the main Kafka producer.
 
 ---
 
 ## Current Implementation State
 
-- [ ] Project scaffold (Spring Boot, dependencies, application.yml)
+- [ ] Project scaffold
 - [ ] Video entity + repository + schema
-- [ ] POST /videos/init — create pending video record
-- [ ] PUT /videos/{id}/upload — upload to R2, update status to READY
-- [ ] GET /videos/{id} — fetch metadata
-- [ ] GET /videos/user/{userId} — fetch user's uploaded videos
-- [ ] GET /videos/search?q= — keyword search
-- [ ] GET /videos/catalog — full catalog
-- [ ] POST /videos/watch — record watch event + publish video.watched
-- [ ] POST /videos/{id}/like — like/dislike + publish video.liked
-- [ ] YouTube API sync — fetch 50+ videos on startup + publish video.uploaded per video
-- [ ] Search click tracking — publish user.searched on search + click
-- [ ] Kafka producer for all 4 topics
+- [ ] POST /videos/init -- create pending video record
+- [ ] PUT /videos/{id}/upload -- upload to R2, update status READY
+- [ ] GET /videos/{id}
+- [ ] GET /videos/user/{userId}
+- [ ] GET /videos/search
+- [ ] GET /videos/catalog (supports language filter)
+- [ ] POST /videos/watch -- insert watch_session + publish video.watched
+- [ ] POST /videos/{id}/like -- update counts + publish video.liked
+- [ ] POST /videos/search/click -- publish user.searched
+- [ ] YouTube sync -- publish video.uploaded per video
+- [ ] Transactional outbox for Kafka publishes
 
 ---
 
-## Package Structure
+## Package Structure (target)
 
 ```
-com.platform.video
-  ├── video/
-  │     ├── VideoController.java
-  │     ├── VideoService.java
-  │     ├── VideoRepository.java
-  │     ├── Video.java                     entity
-  │     ├── VideoTag.java                  entity
-  │     ├── VideoSource.java               ENUM: OWN, YOUTUBE
-  │     ├── VideoStatus.java               ENUM: PENDING, READY
-  │     ├── VideoUploadInitRequest.java    DTO: title, description, tags, categoryId
-  │     ├── VideoUploadInitResponse.java   DTO: videoId, uploadToken
-  │     └── VideoResponse.java            DTO: full video data
-  ├── watch/
-  │     ├── WatchController.java          POST /videos/watch
-  │     ├── WatchService.java             validates + publishes video.watched
-  │     └── WatchRequest.java             DTO: userId, videoId, watchDuration, completionPct
-  ├── catalog/
-  │     ├── CatalogController.java        GET /videos/catalog, GET /videos/search
-  │     └── CatalogService.java           search logic
-  ├── youtube/
-  │     ├── YouTubeService.java           fetches from YouTube Data API v3
-  │     ├── YouTubeSyncRunner.java        ApplicationRunner — syncs on startup
-  │     └── YouTubeVideoMapper.java       maps YouTube response to Video entity
-  ├── storage/
-  │     └── R2StorageService.java         upload/delete/getUrl using AWS S3 SDK (R2-compatible)
-  ├── kafka/
-  │     ├── VideoEventProducer.java       publishVideoUploaded, publishVideoWatched, etc.
-  │     └── events/
-  │           ├── VideoWatchedEvent.java
-  │           ├── VideoLikedEvent.java
-  │           ├── UserSearchedEvent.java
-  │           └── VideoUploadedEvent.java
-  └── config/
-        ├── KafkaConfig.java
-        ├── R2Config.java                 AmazonS3 bean pointing to R2 endpoint
-        └── YouTubeConfig.java
+org.vidrec.videoservice
+  |-- video/
+  |   |-- VideoController.java
+  |   |-- VideoService.java
+  |   |-- VideoRepository.java
+  |   |-- Video.java
+  |   |-- VideoTag.java
+  |   |-- VideoSource.java
+  |   |-- VideoStatus.java
+  |   |-- VideoUploadInitRequest.java
+  |   |-- VideoUploadInitResponse.java
+  |   `-- VideoResponse.java
+  |-- watch/
+  |   |-- WatchController.java
+  |   |-- WatchService.java
+  |   `-- WatchRequest.java
+  |-- catalog/
+  |   |-- CatalogController.java
+  |   `-- CatalogService.java
+  |-- youtube/
+  |   |-- YouTubeService.java
+  |   |-- YouTubeSyncRunner.java
+  |   `-- YouTubeVideoMapper.java
+  |-- storage/
+  |   `-- R2StorageService.java
+  |-- kafka/
+  |   |-- VideoEventProducer.java
+  |   `-- events/
+  |       |-- VideoWatchedEvent.java
+  |       |-- VideoLikedEvent.java
+  |       |-- UserSearchedEvent.java
+  |       `-- VideoUploadedEvent.java
+  |-- outbox/
+  |   |-- OutboxEvent.java
+  |   |-- OutboxEventRepository.java
+  |   `-- OutboxPublisher.java
+  `-- config/
+      |-- KafkaConfig.java
+      |-- R2Config.java
+      `-- YouTubeConfig.java
 ```
 
 ---
 
 ## Key Business Rules
 
-1. **Upload is two steps** — always:
-   - Step 1: POST /videos/init → creates DB record with status=PENDING, returns videoId
-   - Step 2: PUT /videos/{id}/upload → uploads to R2, updates status=READY, publishes video.uploaded
-   - Never skip step 1. The pending record is needed for the upload token.
-
-2. **video.uploaded is published for EVERY video** — own uploads AND YouTube-synced videos
-   - YouTube sync fires one video.uploaded event per video on startup
-
-3. **Watch events are tracked client-side** — the frontend sends completionPct when:
-   - Video ends naturally
-   - User navigates away (use `beforeunload` event)
-   - Every 30 seconds during playback (heartbeat)
-
-4. **Search click tracking** — when user clicks a result:
-   - Frontend sends POST /videos/search with query + clickedVideoId
-   - Service publishes user.searched event
-   - The `resultVideoIds` field = the IDs shown to the user before they clicked
-
-5. **R2 uses AWS S3 SDK** — Cloudflare R2 is S3-compatible. Use `AmazonS3` client with custom endpoint:
-   ```
-   endpoint: https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com
-   ```
-
-6. **YouTube sync runs once on startup via `ApplicationRunner`** — not on every request
-   - Check if video already exists in DB before inserting (idempotent)
-   - Pull educational/tech videos: categoryId 27 (Education) and 28 (Science & Technology)
-
-7. **getUserVideos uses uploaderId, not JOIN with user-service**
-   - `uploader_id` is stored in the `videos` table — no cross-service call needed
+1. Upload is two steps:
+   - POST /videos/init -> creates DB record with status=PENDING, returns videoId + token
+   - PUT /videos/{id}/upload -> uploads to R2, updates status=READY, writes outbox event
+2. video.uploaded is published for every video (own + YouTube).
+3. Watch events insert watch_session and use atomic SQL increments for view_count.
+4. Like/dislike updates are atomic SQL increments.
+5. Kafka publish happens after DB commit (outbox or AFTER_COMMIT listener).
+6. YouTube sync runs on startup and is idempotent.
 
 ---
 
 ## Files to Read First
 
-1. `video/VideoService.java` — central orchestrator for upload flow
-2. `kafka/VideoEventProducer.java` — all Kafka publishing happens here
-3. `youtube/YouTubeSyncRunner.java` — understand the startup sync
-4. `storage/R2StorageService.java` — file storage operations
-5. `watch/WatchService.java` — watch event handling
+1. `video/VideoService.java`
+2. `kafka/VideoEventProducer.java`
+3. `youtube/YouTubeSyncRunner.java`
+4. `storage/R2StorageService.java`
+5. `watch/WatchService.java`
 
 ---
 
 ## Known Issues / TODOs
 
-- No video deletion endpoint yet
-- YouTube sync does not handle API quota errors gracefully
-- No video duration extraction from uploaded files (stored as 0 until fixed)
-- Search is basic LIKE query — no full-text search
+- No video deletion endpoint
+- YouTube sync does not handle quota errors gracefully
+- No duration extraction from uploaded files

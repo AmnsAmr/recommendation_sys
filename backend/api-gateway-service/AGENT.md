@@ -1,4 +1,4 @@
-# AGENT.md — api-gateway
+# AGENT.md -- api-gateway-service
 > Read root RULES.md and root AGENT.md before this file.
 
 ---
@@ -6,8 +6,7 @@
 ## What This Service Does
 
 Single entry point for all client requests. Routes to the correct service, validates JWT on protected routes,
-and forwards the extracted `X-User-Id` header so downstream services know who is making the request.
-Contains almost no business logic — routing config only.
+and forwards the extracted X-User-Id header. Contains minimal business logic.
 
 ---
 
@@ -19,18 +18,19 @@ Contains almost no business logic — routing config only.
 - [ ] Route config for recommendation-service
 - [ ] JWT validation filter
 - [ ] X-User-Id header injection
+- [ ] Internal trust signal (X-Internal-Token or mTLS)
 
 ---
 
-## Package Structure
+## Package Structure (target)
 
 ```
-com.platform.gateway
-  ├── filter/
-  │     └── JwtAuthFilter.java    GlobalFilter — validates JWT, injects X-User-Id
-  ├── config/
-  │     └── RouteConfig.java      all routing rules defined here
-  └── GatewayApplication.java
+org.vidrec.apigateway
+  |-- filter/
+  |   `-- JwtAuthFilter.java
+  |-- config/
+  |   `-- RouteConfig.java
+  `-- ApiGatewayApplication.java
 ```
 
 ---
@@ -50,17 +50,12 @@ com.platform.gateway
 | `/recommendations/similar/**` | recommendation-service:8083 | No |
 | `/recommendations/**` | recommendation-service:8083 | Yes |
 
-## Key Business Rules
-
-1. **JWT validation happens here only** — downstream services trust the `X-User-Id` header
-2. **On valid JWT** → strip `Authorization` header, add `X-User-Id: {uuid}` header, forward
-3. **On invalid JWT on a protected route** → return 401, do not forward
-4. **On public route** → forward without any JWT check
-5. **Service URLs come from env vars** — never hardcode ports in routing config
-
 ---
 
-## Files to Read First
+## Key Business Rules
 
-1. `filter/JwtAuthFilter.java` — the entire security logic lives here
-2. `config/RouteConfig.java` — all routing rules
+1. JWT validation happens at the gateway.
+2. On valid JWT -> strip Authorization header, add X-User-Id.
+3. On invalid JWT on protected route -> return 401.
+4. Service URLs come from env vars.
+5. Enforce internal trust boundary (only gateway can call services).

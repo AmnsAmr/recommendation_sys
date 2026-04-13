@@ -1,87 +1,84 @@
-# AGENT.md — frontend (next-app)
+# AGENT.md -- frontend (web-frontend)
 > Read root RULES.md and root AGENT.md before this file.
 
 ---
 
 ## What This App Does
 
-Next.js 14 frontend. Displays the video catalog, plays videos, shows personalized recommendations,
+Next.js frontend. Displays the video catalog, plays videos, shows personalized recommendations,
 handles upload, and tracks user interactions (watch %, likes, search clicks) to send to the backend.
 
 ---
 
 ## Current Implementation State
 
-- [ ] Project scaffold (Next.js 14, TypeScript, Tailwind, React Query)
-- [ ] lib/api.ts — all API call functions
-- [ ] Homepage — recommendation feed
+- [ ] Project scaffold (Next.js, TypeScript)
+- [ ] lib/api.ts -- API call functions
+- [ ] Homepage -- recommendation feed
 - [ ] Video player page /watch/[id]
 - [ ] Upload page /upload
 - [ ] Search page /search
 - [ ] Auth pages /login, /register
-- [ ] Watch time tracking (heartbeat + on-end)
+- [ ] Watch time tracking
 - [ ] Like/dislike buttons wired to API
 - [ ] Search click tracking
 
 ---
 
-## Folder Structure
+## Folder Structure (target)
 
 ```
-next-app/
-  ├── app/
-  │     ├── page.tsx                    ← homepage: recommendation feed
-  │     ├── watch/[id]/page.tsx         ← video player + similar videos
-  │     ├── upload/page.tsx             ← upload form (auth required)
-  │     ├── search/page.tsx             ← search results
-  │     ├── login/page.tsx
-  │     └── register/page.tsx
-  ├── components/
-  │     ├── VideoCard.tsx               ← thumbnail + title + metadata
-  │     ├── VideoPlayer.tsx             ← HTML5 player (own) or iframe (YouTube)
-  │     ├── RecommendationFeed.tsx      ← grid of VideoCards
-  │     ├── SearchBar.tsx
-  │     └── UploadForm.tsx
-  ├── lib/
-  │     ├── api.ts                      ← ALL fetch calls live here
-  │     ├── auth.ts                     ← JWT storage (localStorage) + helpers
-  │     └── types.ts                    ← all TypeScript types/interfaces
-  └── hooks/
-        ├── useRecommendations.ts       ← React Query hook
-        ├── useVideo.ts
-        └── useWatchTracker.ts          ← tracks watch % and posts to API
+web-frontend/
+  |-- app/
+  |   |-- page.tsx
+  |   |-- watch/[id]/page.tsx
+  |   |-- upload/page.tsx
+  |   |-- search/page.tsx
+  |   |-- login/page.tsx
+  |   `-- register/page.tsx
+  |-- components/
+  |   |-- VideoCard.tsx
+  |   |-- VideoPlayer.tsx
+  |   |-- RecommendationFeed.tsx
+  |   |-- SearchBar.tsx
+  |   `-- UploadForm.tsx
+  |-- lib/
+  |   |-- api.ts
+  |   |-- auth.ts
+  |   `-- types.ts
+  `-- hooks/
+      |-- useRecommendations.ts
+      |-- useVideo.ts
+      `-- useWatchTracker.ts
 ```
 
 ---
 
-## Key Rules for This Service
+## Key Rules for This App
 
-1. **All API calls go through `lib/api.ts`** — never call fetch/axios directly from a component or page
-2. **All server state via React Query** — no `useState` + `useEffect` for data fetching
-3. **All API response types defined in `lib/types.ts`** — no `any`
-4. **JWT stored in `localStorage`** — key: `auth_token`. Read/write only via `lib/auth.ts` helpers
-5. **Watch tracking** — `useWatchTracker` hook handles:
-   - Heartbeat every 30 seconds during playback
-   - Final event on video end
-   - Final event on `beforeunload` (user closes tab)
-6. **Search click** — when user clicks a result, POST /videos/search with `{query, clickedVideoId, resultVideoIds[]}`
-7. **Video player logic**:
-   - `source === "youtube"` → render YouTube iframe
-   - `source === "own"` → render HTML5 `<video>` with R2 signed URL
+1. All API calls go through lib/api.ts.
+2. All server state via React Query if used.
+3. All API response types in lib/types.ts.
+4. JWT stored in localStorage key auth_token (use helpers).
+5. Watch tracking: heartbeat every 30s, on-end event, beforeunload.
+6. Search click: POST /videos/search/click with query, clickedVideoId, resultVideoIds.
+7. Player logic:
+   - source == youtube -> YouTube iframe
+   - source == own -> HTML5 video with signed URL
 
 ---
 
 ## Files to Read First
 
-1. `lib/api.ts` — all API functions
-2. `lib/types.ts` — all data types
-3. `hooks/useWatchTracker.ts` — watch tracking logic
-4. `app/watch/[id]/page.tsx` — most complex page
+1. lib/api.ts
+2. lib/types.ts
+3. hooks/useWatchTracker.ts
+4. app/watch/[id]/page.tsx
 
 ---
 
 ## Known Issues / TODOs
 
-- No pagination on recommendation feed yet
+- No pagination on recommendation feed
 - Upload progress bar not implemented
 - No error boundary components yet

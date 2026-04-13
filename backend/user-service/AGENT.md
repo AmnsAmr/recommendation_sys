@@ -1,4 +1,4 @@
-# AGENT.md — user-service
+# AGENT.md -- user-service
 > Read root RULES.md and root AGENT.md before this file.
 
 ---
@@ -6,7 +6,7 @@
 ## What This Service Does
 
 Handles user registration, login, JWT generation, profile management, and category preferences.
-It is the simplest service but the most security-sensitive — get auth right first.
+Emits user lifecycle events to Kafka for cold-start recommendations.
 
 ---
 
@@ -14,61 +14,64 @@ It is the simplest service but the most security-sensitive — get auth right fi
 
 - [ ] Project scaffold
 - [ ] User entity + repository
-- [ ] POST /users/register
+- [ ] POST /users/register (emits user.registered)
 - [ ] POST /users/login + JWT generation
 - [ ] GET /users/{id}/profile
-- [ ] PUT /users/{id}/preferences
-- [ ] JWT utility class
-- [ ] Spring Security config (permit register/login, require JWT on rest)
+- [ ] PUT /users/{id}/preferences (emits user.prefs.updated)
+- [ ] PUT /users/{id}/profile
+- [ ] Deactivate user (emits user.deactivated)
+- [ ] Password hashing + JWT utility
 
 ---
 
-## Package Structure
+## Package Structure (target)
 
 ```
-com.platform.user
-  ├── user/
-  │     ├── UserController.java
-  │     ├── UserService.java
-  │     ├── UserRepository.java
-  │     ├── User.java                      entity
-  │     ├── RegisterRequest.java           DTO
-  │     ├── LoginRequest.java              DTO
-  │     ├── AuthResponse.java              DTO: token, userId, username
-  │     └── UserProfileResponse.java       DTO
-  ├── preference/
-  │     ├── UserPreference.java            entity
-  │     ├── UserPreferenceRepository.java
-  │     └── PreferenceRequest.java         DTO: category, weight
-  ├── security/
-  │     ├── JwtUtil.java                   generate + validate + extract userId
-  │     ├── JwtFilter.java                 OncePerRequestFilter
-  │     └── SecurityConfig.java
-  └── config/
-        └── PasswordConfig.java            BCryptPasswordEncoder bean
+org.vidrec.userservice
+  |-- user/
+  |   |-- UserController.java
+  |   |-- UserService.java
+  |   |-- UserRepository.java
+  |   |-- User.java
+  |   |-- RegisterRequest.java
+  |   |-- LoginRequest.java
+  |   |-- AuthResponse.java
+  |   `-- UserProfileResponse.java
+  |-- preference/
+  |   |-- UserPreference.java
+  |   |-- UserPreferenceRepository.java
+  |   `-- PreferenceDTO.java
+  |-- event/
+  |   |-- UserRegisteredEvent.java
+  |   |-- UserDeactivatedEvent.java
+  |   `-- UserPreferencesUpdatedEvent.java
+  |-- kafka/
+  |   `-- UserEventPublisher.java
+  `-- security/
+      |-- JwtUtil.java
+      `-- SecurityConfig.java
 ```
 
 ---
 
 ## Key Business Rules
 
-1. **Passwords hashed with BCrypt** — never store plain text, never log passwords
-2. **JWT payload contains only `userId` (UUID)** — no email, no roles in token
-3. **JWT secret from env var `JWT_SECRET`** — never hardcode
-4. **This service does NOT validate JWT** — that happens at the API Gateway
-   - This service generates JWT on login
-   - Gateway validates JWT on every subsequent request
-   - Gateway forwards `X-User-Id` header — services trust this header
-5. **Preferences are replaced on PUT** — delete all existing prefs for userId, insert new ones
-6. **Email must be unique** — return 409 Conflict if duplicate
+1. Passwords hashed with BCrypt (never store plain text).
+2. JWT secret from env var JWT_SECRET.
+3. This service does not validate JWT on incoming requests (gateway does).
+4. Preferences are replaced on PUT (delete existing, insert new).
+5. Emits events after commit:
+   - user.registered
+   - user.prefs.updated
+   - user.deactivated
 
 ---
 
 ## Files to Read First
 
-1. `security/JwtUtil.java` — token generation and validation
-2. `user/UserService.java` — registration and login logic
-3. `security/SecurityConfig.java` — which endpoints are public vs protected
+1. `security/JwtUtil.java`
+2. `user/UserService.java`
+3. `kafka/UserEventPublisher.java`
 
 ---
 
@@ -76,4 +79,4 @@ com.platform.user
 
 - No email verification
 - No password reset flow
-- No refresh token — JWT expires after 24h, user must re-login
+- No refresh token
