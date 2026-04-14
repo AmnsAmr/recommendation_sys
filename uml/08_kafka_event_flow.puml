@@ -11,30 +11,25 @@ queue "video.watched" as tw
 queue "video.liked" as tl
 queue "user.searched" as ts
 queue "video.uploaded" as tu
-queue "user.registered" as tur
-queue "user.deactivated" as tud
-queue "user.prefs.updated" as tup
+queue "user.events" as tue
 participant "Rec Service\n:8083" as rec
 
-note over tw, tup
+note over tw, tue
   All topics consumed exclusively
   by Recommendation Service
 end note
 
-note over tw, tup
+note over tw, tue
   DLQ topics:
   video.watched.dlq
   video.liked.dlq
   user.searched.dlq
   video.uploaded.dlq
   user.registered.dlq
-  user.deactivated.dlq
-  user.prefs.updated.dlq
+  user.events.dlq
 end note
 
-us -> tur : publish\n{\n  eventId, userId,\n  username,\n  interests[],\n  timestamp\n}
-us -> tud : publish\n{\n  eventId, userId,\n  timestamp\n}
-us -> tup : publish\n{\n  eventId, userId,\n  preferences[],\n  timestamp\n}
+us -> tue : publish\n{\n  eventId, userId,\n  eventType: registered | deactivated | prefs_updated,\n  username?, interests[]?, preferences[]?,\n  timestamp\n}
 
 vs -> tw : publish\n{\n  eventId, userId,\n  videoId,\n  completionPct,\n  watchDuration,\n  videoDuration,\n  source: own|youtube,\n  timestamp\n}
 
@@ -52,6 +47,6 @@ ts -> rec : consume\n-> score = 0.5 if clicked\n-> update content profile\n-> IN
 
 tu -> rec : consume\n-> INSERT item_factors\n-> build content index\n-> (no cache invalidation)
 
-tur -> rec : consume\n-> INSERT user_category_profiles\n-> source = declared\n-> weight = 1.0
+tue -> rec : consume (registered)\n-> INSERT user_category_profiles\n-> source = declared\n-> weight = 1.0
 
 @enduml

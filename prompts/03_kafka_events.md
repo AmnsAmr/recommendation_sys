@@ -7,7 +7,7 @@ Required topics:
 - video.liked
 - user.searched
 - video.uploaded
-- user.registered
+- user.events
 
 Producer responsibilities:
 1. Generate eventId (UUID) at publish time.
@@ -75,14 +75,34 @@ video.uploaded:
 }
 ```
 
-user.registered:
+user.events:
 ```json
 {
   "eventId": "uuid",
   "userId": "uuid",
+  "eventType": "registered",
   "username": "alice",
   "interests": ["technology"],
   "timestamp": "2026-04-13T12:04:00Z"
+}
+```
+
+```json
+{
+  "eventId": "uuid",
+  "userId": "uuid",
+  "eventType": "deactivated",
+  "timestamp": "2026-04-13T12:05:00Z"
+}
+```
+
+```json
+{
+  "eventId": "uuid",
+  "userId": "uuid",
+  "eventType": "prefs_updated",
+  "preferences": ["technology", "science"],
+  "timestamp": "2026-04-13T12:06:00Z"
 }
 ```
 

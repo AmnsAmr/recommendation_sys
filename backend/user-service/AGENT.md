@@ -14,12 +14,12 @@ Emits user lifecycle events to Kafka for cold-start recommendations.
 
 - [ ] Project scaffold
 - [ ] User entity + repository
-- [ ] POST /users/register (emits user.registered)
+- [ ] POST /users/register (emits user.events type=registered)
 - [ ] POST /users/login + JWT generation
 - [ ] GET /users/{id}/profile
-- [ ] PUT /users/{id}/preferences (emits user.prefs.updated)
+- [ ] PUT /users/{id}/preferences (emits user.events type=prefs_updated)
 - [ ] PUT /users/{id}/profile
-- [ ] Deactivate user (emits user.deactivated)
+- [ ] Deactivate user (emits user.events type=deactivated)
 - [ ] Password hashing + JWT utility
 
 ---
@@ -42,9 +42,7 @@ org.vidrec.userservice
   |   |-- UserPreferenceRepository.java
   |   `-- PreferenceDTO.java
   |-- event/
-  |   |-- UserRegisteredEvent.java
-  |   |-- UserDeactivatedEvent.java
-  |   `-- UserPreferencesUpdatedEvent.java
+  |   `-- UserEvent.java
   |-- kafka/
   |   `-- UserEventPublisher.java
   `-- security/
@@ -61,9 +59,7 @@ org.vidrec.userservice
 3. This service does not validate JWT on incoming requests (gateway does).
 4. Preferences are replaced on PUT (delete existing, insert new).
 5. Emits events after commit:
-   - user.registered
-   - user.prefs.updated
-   - user.deactivated
+   - user.events (eventType = registered, prefs_updated, deactivated)
 
 ---
 

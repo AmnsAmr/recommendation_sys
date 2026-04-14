@@ -18,7 +18,8 @@ Caches results in Redis. Handles cold start for new users.
 - [ ] Idempotency via processed_events
 - [ ] Interactions table insert on every event
 - [ ] Item factors update on video.uploaded and video.watched
-- [ ] User category profile insert on user.registered
+- [ ] User category profile insert on user.events (registered)
+- [ ] Handle user.events (prefs_updated, deactivated)
 - [ ] Content-based engine (cosine similarity)
 - [ ] Hybrid scorer (SVD + content)
 - [ ] Cold start logic (declared interests)
@@ -58,7 +59,7 @@ org.vidrec.recommendationservice
   |       |-- VideoLikedEvent.java
   |       |-- UserSearchedEvent.java
   |       |-- VideoUploadedEvent.java
-  |       `-- UserRegisteredEvent.java
+  |       `-- UserEvent.java
   `-- config/
       |-- KafkaConfig.java
       `-- RedisConfig.java
@@ -75,6 +76,10 @@ org.vidrec.recommendationservice
 5. video.uploaded builds content index only (no cache invalidation).
 6. Idempotency: if eventId already exists in processed_events, skip.
 7. item_factors includes thumbnail_url and language for cold start + similar videos.
+8. user.events:
+   - registered: insert user_category_profiles (source=declared)
+   - prefs_updated: replace user_category_profiles (source=declared)
+   - deactivated: invalidate cache for userId
 
 ---
 

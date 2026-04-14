@@ -22,7 +22,7 @@ package "Backend -- Spring Boot Microservices" {
 }
 
 package "Event Bus" {
-  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded\nuser.registered\nuser.deactivated\nuser.prefs.updated" as kafka
+  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded\nuser.events" as kafka
 }
 
 package "Storage" {

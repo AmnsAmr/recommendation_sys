@@ -92,9 +92,7 @@ DLQ topics:
 2. `video.liked.dlq`
 3. `user.searched.dlq`
 4. `video.uploaded.dlq`
-5. `user.registered.dlq`
-6. `user.deactivated.dlq`
-7. `user.prefs.updated.dlq`
+5. `user.events.dlq`
 
 ---
 
@@ -255,60 +253,9 @@ DLQ topics:
 
 ---
 
-### KE-05 -- user.registered
+### KE-05 -- user.events (MVP consolidated)
 
-**Topic:** `user.registered`
-**Producer:** user-service
-**Consumer:** recommendation-service
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `eventId` | `string (UUID)` | Yes | Unique event ID |
-| `userId` | `string (UUID)` | Yes | New user ID |
-| `username` | `string` | Yes | Username |
-| `interests` | `array[string]` | Yes | Declared interests (category IDs) |
-| `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
-
-```json
-{
-  "eventId": "a5b6c7d8-e9f0-1234-abcd-567890123456",
-  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "username": "alice_dev",
-  "interests": ["technology", "science", "programming"],
-  "timestamp": "2024-11-01T10:31:00Z"
-}
-```
-
-**Action by consumer:**
-- Insert one UserCategoryProfile per interest with `weight = 1.0` and `source = "declared"`
-
----
-
-### KE-06 -- user.deactivated
-
-**Topic:** `user.deactivated`
-**Producer:** user-service
-**Consumer:** recommendation-service
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `eventId` | `string (UUID)` | Yes | Unique event ID |
-| `userId` | `string (UUID)` | Yes | Deactivated user ID |
-| `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
-
-```json
-{
-  "eventId": "b6c7d8e9-f012-3456-abcd-678901234567",
-  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "timestamp": "2024-11-01T10:50:00Z"
-}
-```
-
----
-
-### KE-07 -- user.prefs.updated
-
-**Topic:** `user.prefs.updated`
+**Topic:** `user.events`
 **Producer:** user-service
 **Consumer:** recommendation-service
 
@@ -316,17 +263,44 @@ DLQ topics:
 |---|---|---|---|
 | `eventId` | `string (UUID)` | Yes | Unique event ID |
 | `userId` | `string (UUID)` | Yes | User ID |
-| `preferences` | `array[string]` | Yes | Updated preference categories |
+| `eventType` | `string (enum)` | Yes | `"registered"`, `"deactivated"`, `"prefs_updated"` |
+| `username` | `string` | No | Required when eventType = registered |
+| `interests` | `array[string]` | No | Required when eventType = registered |
+| `preferences` | `array[string]` | No | Required when eventType = prefs_updated |
 | `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
+
+```json
+{
+  "eventId": "a5b6c7d8-e9f0-1234-abcd-567890123456",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "eventType": "registered",
+  "username": "alice_dev",
+  "interests": ["technology", "science", "programming"],
+  "timestamp": "2024-11-01T10:31:00Z"
+}
+```
+
+```json
+{
+  "eventId": "b6c7d8e9-f012-3456-abcd-678901234567",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "eventType": "deactivated",
+  "timestamp": "2024-11-01T10:50:00Z"
+}
+```
 
 ```json
 {
   "eventId": "c7d8e9f0-1234-5678-abcd-789012345678",
   "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "eventType": "prefs_updated",
   "preferences": ["technology", "science"],
   "timestamp": "2024-11-01T10:55:00Z"
 }
 ```
+
+**Action by consumer:**
+- If eventType = registered: insert UserCategoryProfile per interest (weight=1.0, source=declared)
 
 ---
 
@@ -372,9 +346,7 @@ DLQ topics:
 | KE-02 | `video.liked` | video-service | recommendation-service | No change |
 | KE-03 | `user.searched` | video-service | recommendation-service | No change |
 | KE-04 | `video.uploaded` | video-service | recommendation-service | Added `thumbnailUrl` + `language` fields |
-| KE-05 | `user.registered` | user-service | recommendation-service | NEW -- initial interests for cold start |
-| KE-06 | `user.deactivated` | user-service | recommendation-service | NEW |
-| KE-07 | `user.prefs.updated` | user-service | recommendation-service | NEW |
+| KE-05 | `user.events` | user-service | recommendation-service | NEW (registered + lifecycle) |
 
 ---
 

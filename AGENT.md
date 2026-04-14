@@ -116,9 +116,7 @@ Cache is invalidated every time a new interaction event arrives for that user.
 | `video.liked` | eventId, userId, videoId, action, source, timestamp | video-service | recommendation-service |
 | `user.searched` | eventId, userId, query, resultVideoIds, clickedVideoId, timestamp | video-service | recommendation-service |
 | `video.uploaded` | eventId, videoId, title, description, tags, categoryId, thumbnailUrl, language, source, timestamp | video-service | recommendation-service |
-| `user.registered` | eventId, userId, username, interests, timestamp | user-service | recommendation-service |
-| `user.deactivated` | eventId, userId, timestamp | user-service | recommendation-service |
-| `user.prefs.updated` | eventId, userId, preferences, timestamp | user-service | recommendation-service |
+| `user.events` | eventId, userId, eventType, username?, interests?, preferences?, timestamp | user-service | recommendation-service |
 
 All events must be idempotent: check `processed_events` by eventId before processing.
 
