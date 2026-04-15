@@ -1,0 +1,139 @@
+User Service Curl Tutorial
+==========================
+
+This file shows how to test the same endpoints covered by `test-api.ps1`,
+but manually with curl commands.
+
+Use `curl.exe` in PowerShell, not `curl`, because PowerShell aliases `curl`
+to `Invoke-WebRequest`.
+
+Base URL
+--------
+
+Direct user-service:
+`http://localhost:8081`
+
+Set a reusable base URL in PowerShell:
+
+`$BASE_URL = "http://localhost:8081"`
+
+
+1. Register
+-----------
+
+Pick unique values for `email` and `username` each time:
+
+```powershell
+curl.exe -X POST "$BASE_URL/users/register" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"curltest1@example.com\",\"password\":\"Password123!\",\"username\":\"curltest_1\",\"displayName\":\"Curl Test User\",\"interests\":[\"music\",\"gaming\",\"education\"]}"
+```
+
+Expected result:
+- HTTP `201`
+- JSON body containing `token`, `userId`, `username`, `displayName`, `expiresIn`
+
+Copy these two values from the response:
+- `userId`
+- `token`
+
+Save them in PowerShell:
+
+```powershell
+$USER_ID = "paste-user-id-here"
+$TOKEN = "paste-jwt-token-here"
+```
+
+
+2. Login
+--------
+
+```powershell
+curl.exe -X POST "$BASE_URL/users/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"curltest1@example.com\",\"password\":\"Password123!\"}"
+```
+
+Expected result:
+- HTTP `200`
+- JSON body containing a fresh `token`
+
+If you want to use the login token for the next requests, replace `$TOKEN`
+with the new value from the login response.
+
+
+3. Get Profile
+--------------
+
+For direct testing on `localhost:8081`, use both:
+- `Authorization: Bearer ...`
+- `X-User-Id`
+
+```powershell
+curl.exe -X GET "$BASE_URL/users/$USER_ID/profile" ^
+  -H "Authorization: Bearer $TOKEN" ^
+  -H "X-User-Id: $USER_ID"
+```
+
+Expected result:
+- HTTP `200`
+- JSON body containing `userId`, `username`, `displayName`, `bio`,
+  `profilePictureUrl`, `email`, `preferences`, `isActive`, `createdAt`, `updatedAt`
+
+
+4. Update Profile
+-----------------
+
+```powershell
+curl.exe -X PUT "$BASE_URL/users/$USER_ID/profile" ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer $TOKEN" ^
+  -H "X-User-Id: $USER_ID" ^
+  -d "{\"displayName\":\"Updated Curl Test User\",\"bio\":\"Updated manually with curl\",\"profilePictureUrl\":\"https://example.com/avatar/test.png\"}"
+```
+
+Expected result:
+- HTTP `200`
+- Updated profile JSON
+
+
+5. Update Preferences
+---------------------
+
+```powershell
+curl.exe -X PUT "$BASE_URL/users/$USER_ID/preferences" ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer $TOKEN" ^
+  -H "X-User-Id: $USER_ID" ^
+  -d "{\"preferences\":[{\"category\":\"music\",\"weight\":0.90},{\"category\":\"gaming\",\"weight\":0.70},{\"category\":\"education\",\"weight\":0.65}]}"
+```
+
+Expected result:
+- HTTP `200`
+- Updated profile JSON with new preferences
+
+
+Common Errors
+-------------
+
+`401 Unauthorized`
+- Missing or invalid JWT
+- Missing `X-User-Id` on direct service calls
+
+`403 Forbidden`
+- `X-User-Id` does not match the `userId` in the JWT or path
+
+`409 Conflict`
+- Email or username already exists on register
+
+`400 Bad Request`
+- Validation failed in the JSON body
+
+
+Gateway Note
+------------
+
+If you test through the API gateway instead of direct service access:
+- base URL is usually `http://localhost:8080`
+- send `Authorization: Bearer $TOKEN`
+- do not manually send `X-User-Id` unless your current gateway setup expects it

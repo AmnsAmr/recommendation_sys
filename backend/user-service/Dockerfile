@@ -5,6 +5,7 @@ COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
 RUN ./mvnw -q -DskipTests dependency:go-offline
 
+COPY ca.pem client.keystore.p12 client.truststore.jks ./
 COPY src/ src/
 RUN ./mvnw -q -DskipTests package
 

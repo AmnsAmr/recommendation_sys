@@ -52,3 +52,12 @@ coverage/
 # AI TOOLS
 # =========================
 .qodo/
+
+# Maven local repo
+.m2repo/
+
+
+target/
+*.log
+*.class
+*.jar
