@@ -1,4 +1,4 @@
-@startuml System Architecture
+for @startuml System Architecture
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
