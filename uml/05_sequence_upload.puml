@@ -8,6 +8,7 @@ skinparam SequenceBoxBorderColor #888888
 title Video Upload Flow (Transactional Outbox)
 
 actor "User" as user
+actor "Admin" as admin
 participant "Frontend\n(Next.js)" as fe
 participant "API Gateway\n:8080" as gw
 participant "Video Service\n:8082" as vs
@@ -30,7 +31,19 @@ note right of fe : File goes directly to\nvideo service
 
 vs -> s3 : upload file stream
 s3 --> vs : s3Key / file URL
-vs -> db : UPDATE video SET status=READY,\n  s3Key=..., thumbnailUrl=...
+vs -> db : UPDATE video SET status=UNDER_REVIEW,\n  s3Key=..., thumbnailUrl=...
+vs --> fe : { videoId, status: "UNDER_REVIEW" }
+
+admin -> fe : opens moderation dashboard
+fe -> gw : GET /admin/videos/pending
+gw -> vs : forward request (admin JWT validated)
+vs -> db : SELECT videos WHERE status=UNDER_REVIEW
+vs --> fe : moderation queue
+
+admin -> fe : approves uploaded video
+fe -> gw : POST /admin/videos/{videoId}/approve
+gw -> vs : forward request (X-User-Role=ADMIN)
+vs -> db : UPDATE video SET status=READY,\n reviewedBy=adminId,\n reviewedAt=now,\n publishedAt=now
 vs -> db : INSERT outbox_event\n(topic=video.uploaded, payload=...)\n(same transaction)
 vs --> fe : { videoId, status: "READY" }
 
@@ -42,6 +55,7 @@ kafka -> rec : consume video.uploaded
 rec -> rec : add to content-based index\n(ItemFactor record)
 rec --> kafka : ack
 
-fe --> user : "Upload complete!"
+fe --> user : "Upload submitted for review!"
+fe --> admin : "Video is now public"
 
 @enduml

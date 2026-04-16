@@ -18,7 +18,9 @@ package "video-service" {
     enum VideoStatus {
       PENDING
       PROCESSING
+      UNDER_REVIEW
       READY
+      REJECTED
       FAILED
     }
 
@@ -38,6 +40,10 @@ package "video-service" {
       - dislikeCount: Long
       - language: String
       - status: VideoStatus
+      - moderationNotes: String
+      - reviewedBy: UUID
+      - reviewedAt: LocalDateTime
+      - publishedAt: LocalDateTime
       - createdAt: LocalDateTime
       - updatedAt: LocalDateTime
     }
@@ -154,6 +160,17 @@ package "video-service" {
       + likeVideo(videoId: String, request: LikeRequest): ResponseEntity<VideoResponse>
       + recordSearchClick(request: SearchClickRequest): ResponseEntity<Void>
     }
+
+    class AdminVideoController {
+      - adminVideoService: AdminVideoService
+      + getDashboard(): ResponseEntity<AdminVideoDashboardResponse>
+      + listPending(page: int, size: int): ResponseEntity<Page<AdminVideoSummaryResponse>>
+      + getVideo(videoId: String): ResponseEntity<AdminVideoDetailResponse>
+      + updateVideo(videoId: String, request: AdminVideoUpdateRequest): ResponseEntity<AdminVideoDetailResponse>
+      + approveVideo(videoId: String, request: AdminModerationRequest): ResponseEntity<AdminVideoDetailResponse>
+      + rejectVideo(videoId: String, request: AdminModerationRequest): ResponseEntity<AdminVideoDetailResponse>
+      + deleteVideo(videoId: String): ResponseEntity<Void>
+    }
   }
 
   package "service" {
@@ -173,6 +190,19 @@ package "video-service" {
       + recordWatchSession(request: WatchRequest, userId: UUID): void
       + likeVideo(videoId: String, userId: UUID, action: String): Video
       + recordSearchClick(request: SearchClickRequest, userId: UUID): void
+    }
+
+    class AdminVideoService {
+      - videoRepository: VideoRepository
+      - watchSessionRepository: WatchSessionRepository
+      - outboxEventRepository: OutboxEventRepository
+      + getDashboard(): AdminVideoDashboardResponse
+      + listPending(page: int, size: int): Page<AdminVideoSummaryResponse>
+      + getVideo(videoId: String): AdminVideoDetailResponse
+      + updateVideo(videoId: String, request: AdminVideoUpdateRequest): AdminVideoDetailResponse
+      + approveVideo(videoId: String, adminId: UUID, request: AdminModerationRequest): AdminVideoDetailResponse
+      + rejectVideo(videoId: String, adminId: UUID, request: AdminModerationRequest): AdminVideoDetailResponse
+      + deleteVideo(videoId: String): void
     }
 
     class StorageService {
@@ -207,6 +237,50 @@ package "video-service" {
     }
   }
 
+  package "admin-dto" {
+    class AdminVideoDashboardResponse {
+      + totalVideos: long
+      + publicVideos: long
+      + pendingReviewVideos: long
+      + rejectedVideos: long
+      + youtubeVideos: long
+      + platformVideos: long
+      + uploadsLast7Days: long
+      + totalViews: long
+    }
+
+    class AdminVideoSummaryResponse {
+      + videoId: String
+      + title: String
+      + uploaderId: UUID
+      + status: String
+      + thumbnailUrl: String
+      + createdAt: LocalDateTime
+    }
+
+    class AdminVideoDetailResponse {
+      + videoId: String
+      + title: String
+      + categoryId: String
+      + status: String
+      + moderationNotes: String
+      + reviewedBy: UUID
+      + reviewedAt: LocalDateTime
+      + publishedAt: LocalDateTime
+    }
+
+    class AdminVideoUpdateRequest {
+      + title: String
+      + description: String
+      + categoryId: String
+      + language: String
+    }
+
+    class AdminModerationRequest {
+      + notes: String
+    }
+  }
+
   package "repository" {
     interface VideoRepository {
       + findById(id: String): Optional<Video>
@@ -238,6 +312,10 @@ package "video-service" {
   }
 
   VideoController --> VideoService
+  AdminVideoController --> AdminVideoService
+  AdminVideoService --> VideoRepository
+  AdminVideoService --> WatchSessionRepository
+  AdminVideoService --> OutboxEventRepository
   VideoService --> VideoRepository
   VideoService --> WatchSessionRepository
   VideoService --> UploadTokenRepository
@@ -254,8 +332,9 @@ note bottom of Video
   + viewCount (denormalized counter, incremented on each watch)
   + likeCount / dislikeCount (denormalized, no DB scan needed)
   + language (useful for content-based filtering)
+  + moderationNotes / reviewedBy / reviewedAt / publishedAt
+  + UNDER_REVIEW and REJECTED added to VideoStatus
   + updatedAt (track edits)
-  + PROCESSING and FAILED added to VideoStatus
 end note
 
 note bottom of WatchSession
@@ -274,6 +353,9 @@ note bottom of OutboxEvent
   Transactional outbox:
   write event in same DB transaction,
   publish via OutboxPublisher after commit.
+  For platform uploads, write the
+  video.uploaded outbox event only when
+  an admin approves the video.
 end note
 
 @enduml

@@ -21,6 +21,7 @@ participant "Redis Cache" as redis
 user -> fe : watches video (plays in player)
 
 note over fe : Frontend tracks watch time\n(every 30s or on video end)
+note over fe, vs : Only public READY videos\n(admin-approved for platform uploads)\ncan reach this flow.
 
 fe -> gw : POST /videos/watch\n{ userId, videoId, watchDuration,\n  videoDuration, completionPct }
 gw -> vs : forward

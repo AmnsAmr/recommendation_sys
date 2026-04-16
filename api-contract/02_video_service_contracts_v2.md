@@ -2,7 +2,7 @@
 > Base URL (via gateway): `http://localhost:8080`
 > Direct service URL: `http://localhost:8082`
 > All responses: `Content-Type: application/json`
-> v2 changes: thumbnailUrl + viewCount + likeCount + dislikeCount + language added to video responses, VideoStatus extended, language added to upload request
+> v2 changes: thumbnailUrl + viewCount + likeCount + dislikeCount + language added to video responses, VideoStatus extended, language added to upload request, admin moderation endpoints added
 
 ---
 
@@ -93,7 +93,7 @@ Content-Type: application/json
 | Service | video-service |
 | HTTP Method | `PUT` |
 | URL Path | `/videos/{videoId}/upload` |
-| Description | Uploads the actual video file to R2 storage. Sets status to READY. Publishes `video.uploaded` after DB commit (transactional outbox or AFTER_COMMIT listener). |
+| Description | Uploads the actual video file to R2 storage. Platform uploads move to `UNDER_REVIEW` and remain private until an admin approves them. `video.uploaded` is published only after approval. |
 
 ### Request
 
@@ -123,7 +123,7 @@ X-Upload-Token: {uploadToken}
 | Field | Type | Description |
 |---|---|---|
 | `videoId` | `string` | Video ID |
-| `status` | `string` | `"READY"` |
+| `status` | `string` | `"UNDER_REVIEW"` |
 | `thumbnailUrl` | `string` | Auto-generated thumbnail URL from R2 |
 | `url` | `string` | Signed R2 streaming URL |
 | `uploadedAt` | `string (ISO-8601)` | Upload completion timestamp |
@@ -131,7 +131,7 @@ X-Upload-Token: {uploadToken}
 ```json
 {
   "videoId": "vid_k3m9p2x1",
-  "status": "READY",
+  "status": "UNDER_REVIEW",
   "thumbnailUrl": "https://pub-xxx.r2.dev/thumbnails/vid_k3m9p2x1.jpg",
   "url": "https://pub-xxx.r2.dev/vid_k3m9p2x1.mp4",
   "uploadedAt": "2024-11-01T10:35:00Z"
@@ -207,7 +207,7 @@ X-Upload-Token: {uploadToken}
 | `dislikeCount` | `integer` | Total dislike count |
 | `language` | `string` | ISO 639-1 language code |
 | `uploaderId` | `string (UUID) \| null` | Uploader ID (null if youtube) |
-| `status` | `string (enum)` | `"PENDING"`, `"PROCESSING"`, `"READY"`, or `"FAILED"` |
+| `status` | `string (enum)` | `"PENDING"`, `"PROCESSING"`, `"UNDER_REVIEW"`, `"READY"`, `"REJECTED"`, or `"FAILED"` |
 | `createdAt` | `string (ISO-8601)` | Creation timestamp |
 
 ```json
@@ -397,7 +397,7 @@ Content-Type: application/json
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
-| `videoId` | `string` | Yes | Must be an existing READY video |
+| `videoId` | `string` | Yes | Must be an existing public `READY` video |
 | `watchDuration` | `integer` | Yes | Seconds watched, >= 0 |
 | `videoDuration` | `integer` | Yes | Total video length, > 0 |
 | `completionPct` | `number (float)` | Yes | 0.0 to 1.0 |
@@ -624,3 +624,250 @@ Content-Type: application/json
 
 ### Idempotency
 - **No** — each call produces a new Kafka event.
+
+---
+
+## VS-10 — Admin Video Dashboard
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/videos/dashboard` |
+| Description | Returns video-side platform metrics for the admin dashboard, including moderation backlog and public catalog counts. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "totalVideos": 840,
+  "publicVideos": 721,
+  "pendingReviewVideos": 34,
+  "rejectedVideos": 12,
+  "youtubeVideos": 401,
+  "platformVideos": 439,
+  "uploadsLast7Days": 58,
+  "totalViews": 124093
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-11 — List Pending Videos
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/videos/pending` |
+| Description | Returns the moderation queue of platform-uploaded videos awaiting review. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "videos": [
+    {
+      "videoId": "vid_k3m9p2x1",
+      "title": "Introduction to Apache Kafka",
+      "uploaderId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "status": "UNDER_REVIEW",
+      "thumbnailUrl": "https://pub-xxx.r2.dev/thumbnails/vid_k3m9p2x1.jpg",
+      "createdAt": "2024-11-01T10:35:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-12 — Get Video For Admin
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/videos/{videoId}` |
+| Description | Returns full metadata for a video including moderation fields. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "videoId": "vid_k3m9p2x1",
+  "title": "Introduction to Apache Kafka",
+  "description": "A beginner-friendly walkthrough of Kafka concepts.",
+  "categoryId": "technology",
+  "status": "UNDER_REVIEW",
+  "uploaderId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "thumbnailUrl": "https://pub-xxx.r2.dev/thumbnails/vid_k3m9p2x1.jpg",
+  "moderationNotes": null,
+  "reviewedBy": null,
+  "reviewedAt": null,
+  "publishedAt": null
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-13 — Update Video As Admin
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `PUT` |
+| URL Path | `/admin/videos/{videoId}` |
+| Description | Allows an admin to edit platform-uploaded video metadata without changing visibility. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+Content-Type: application/json
+```
+
+**Request Body**
+
+```json
+{
+  "title": "Reviewed Kafka Introduction",
+  "description": "Metadata updated by admin",
+  "categoryId": "technology",
+  "language": "en"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-14 — Approve Video
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `POST` |
+| URL Path | `/admin/videos/{videoId}/approve` |
+| Description | Approves a platform-uploaded video, sets status to `READY`, stamps moderation info, and publishes `video.uploaded` after commit. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+Content-Type: application/json
+```
+
+**Request Body**
+
+```json
+{
+  "notes": "Content reviewed and approved"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-15 — Reject Video
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `POST` |
+| URL Path | `/admin/videos/{videoId}/reject` |
+| Description | Rejects a platform-uploaded video and stores moderation notes. Rejected videos remain private. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+Content-Type: application/json
+```
+
+**Request Body**
+
+```json
+{
+  "notes": "Contains prohibited content"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## VS-16 — Delete Video
+
+| Field | Value |
+|---|---|
+| Service | video-service |
+| HTTP Method | `DELETE` |
+| URL Path | `/admin/videos/{videoId}` |
+| Description | Deletes a platform-uploaded video and its local moderation/upload metadata. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 204 No Content**
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**

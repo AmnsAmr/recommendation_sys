@@ -19,5 +19,6 @@ public class UserEvent {
     private String username;
     private List<String> interests;
     private List<String> preferences;
+    private String reason;
     private Instant timestamp;
 }

@@ -62,6 +62,15 @@ All Kafka publishes must happen after DB commit.
 Use a transactional outbox or AFTER_COMMIT listener.
 No dual-write risk.
 
+### 2.6 Admin Moderation Is Mandatory
+- Admins are first-class platform users with role `ADMIN`
+- The gateway forwards both `X-User-Id` and `X-User-Role`
+- Own uploads are never public immediately after upload
+- A platform-uploaded video becomes public only after admin approval
+- `video.uploaded` is emitted only when the video is approved and visible to end users
+- Admin dashboard data should come from service-local aggregates exposed by the owning service; do not create cross-service HTTP calls just to build a dashboard
+- If a comment domain/service is introduced, admin moderation endpoints for listing, hiding, and deleting comments become mandatory as well
+
 ---
 
 ## 3. Kafka Rules
@@ -73,9 +82,7 @@ No dual-write risk.
 | video.liked | video-service | recommendation-service |
 | user.searched | video-service | recommendation-service |
 | video.uploaded | video-service | recommendation-service |
-| user.registered | user-service | recommendation-service |
-| user.deactivated | user-service | recommendation-service |
-| user.prefs.updated | user-service | recommendation-service |
+| user.events | user-service | recommendation-service |
 
 Never create a new topic without updating this table.
 
@@ -84,6 +91,13 @@ All Kafka messages are JSON and must include:
 - eventId (UUID)
 - timestamp (ISO-8601)
 - event-specific fields
+
+For consolidated user lifecycle messages on `user.events`, `eventType` must be one of:
+- `registered`
+- `deactivated`
+- `prefs_updated`
+- `banned`
+- `deleted`
 
 ### 3.3 Idempotency
 Every consumer must deduplicate by eventId:
@@ -100,10 +114,14 @@ On failure: log error with full payload and do not crash the consumer.
 
 - JWT is validated at the API Gateway
 - Downstream services trust X-User-Id
+- Downstream services trust X-User-Role
+- JWT payloads must carry the user's role so admin-only routes can be enforced consistently
 - Services must only accept traffic from the gateway or verify an internal token
 - Passwords must be BCrypt hashed
 - Never log secrets or PII
 - Never hardcode secrets
+- Admin-only endpoints must explicitly enforce `ADMIN` role
+- Banned users must not be able to authenticate, upload, or create new interactions
 
 ---
 
@@ -143,8 +161,8 @@ If asked to break rules:
 | Service | Port | Language | Main job |
 |---|---|---|---|
 | api-gateway-service | 8080 | Spring Cloud Gateway | Route + validate JWT |
-| user-service | 8081 | Spring Boot | Auth, profiles, preferences |
-| video-service | 8082 | Spring Boot | Upload, catalog, YouTube, Kafka producer |
+| user-service | 8081 | Spring Boot | Auth, profiles, preferences, admin user management |
+| video-service | 8082 | Spring Boot | Upload, moderation, catalog, YouTube, Kafka producer |
 | recommendation-service | 8083 | Spring Boot | Hybrid recs, Kafka consumer, Redis |
 | svd-sidecar | 8000 | FastAPI | Model train/predict |
 | frontend | 3000 | Next.js | UI |

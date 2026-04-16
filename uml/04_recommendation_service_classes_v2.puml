@@ -272,6 +272,7 @@ note bottom of ItemFactor
   + thumbnailUrl + language for cold start and similar videos
   + viewCount (global popularity for cold start ranking)
   + globalScore (pre-computed popularity score, updated on each watch)
+  + receives only admin-approved platform uploads
   Used for: cold start recommendations when no user history
 end note
 
@@ -285,6 +286,8 @@ end note
 note bottom of RecommendationEventConsumer
   Idempotency: skip if eventId exists in processed_events.
   Failed processing routes to per-topic DLQ.
+  user.events banned/deleted should invalidate cache and
+  keep moderated accounts from resurfacing in fresh recs.
 end note
 
 @enduml

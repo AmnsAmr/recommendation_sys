@@ -25,11 +25,10 @@ note over tw, tue
   video.liked.dlq
   user.searched.dlq
   video.uploaded.dlq
-  user.registered.dlq
   user.events.dlq
 end note
 
-us -> tue : publish\n{\n  eventId, userId,\n  eventType: registered | deactivated | prefs_updated,\n  username?, interests[]?, preferences[]?,\n  timestamp\n}
+us -> tue : publish\n{\n  eventId, userId,\n  eventType: registered | deactivated | prefs_updated | banned | deleted,\n  username?, interests[]?, preferences[]?, reason?,\n  timestamp\n}
 
 vs -> tw : publish\n{\n  eventId, userId,\n  videoId,\n  completionPct,\n  watchDuration,\n  videoDuration,\n  source: own|youtube,\n  timestamp\n}
 
@@ -37,7 +36,7 @@ vs -> tl : publish\n{\n  eventId, userId,\n  videoId,\n  action: like|dislike,\n
 
 vs -> ts : publish\n{\n  eventId, userId,\n  query,\n  resultVideoIds[],\n  clickedVideoId,\n  timestamp\n}
 
-vs -> tu : publish\n{\n  eventId, videoId,\n  title, description,\n  tags[], categoryId,\n  thumbnailUrl,\n  language,\n  source: own|youtube,\n  timestamp\n}
+vs -> tu : publish (only after admin approval)\n{\n  eventId, videoId,\n  title, description,\n  tags[], categoryId,\n  thumbnailUrl,\n  language,\n  source: own|youtube,\n  timestamp\n}
 
 tw -> rec : consume\n-> score = completionPct\n-> INSERT interaction\n-> update SVD factors\n-> update item_factors.view_count\n-> invalidate cache
 
@@ -45,8 +44,10 @@ tl -> rec : consume\n-> score = like(1.0) | dislike(-1.0)\n-> INSERT interaction
 
 ts -> rec : consume\n-> score = 0.5 if clicked\n-> update content profile\n-> INSERT interaction
 
-tu -> rec : consume\n-> INSERT item_factors\n-> build content index\n-> (no cache invalidation)
+tu -> rec : consume\n-> INSERT item_factors for approved/public video\n-> build content index\n-> (no cache invalidation)
 
 tue -> rec : consume (registered)\n-> INSERT user_category_profiles\n-> source = declared\n-> weight = 1.0
+
+tue -> rec : consume (banned/deleted)\n-> invalidate cache\n-> ignore moderated account state
 
 @enduml

@@ -8,6 +8,7 @@ skinparam componentBorderColor #888888
 title Video Platform -- System Architecture
 
 actor "User" as user
+actor "Admin" as admin
 
 package "Frontend" {
   [Next.js / React + TypeScript\nport 3000] as frontend
@@ -38,16 +39,21 @@ package "External" {
 }
 
 user --> frontend : HTTP
+admin --> frontend : admin HTTP
 frontend --> gateway : REST / HTTPS
 gateway --> userSvc : route /users/**
 gateway --> videoSvc : route /videos/**
 gateway --> recSvc : route /recommendations/**
+gateway --> userSvc : route /admin/users/**
+gateway --> videoSvc : route /admin/videos/**
 
 note right of gateway
   Trust boundary: services only accept
   requests from the gateway and verify
   an internal auth signal (X-Internal-Token
-  or mTLS). Direct service ports are not exposed.
+  or mTLS). Gateway forwards X-User-Id
+  and X-User-Role. Direct service ports
+  are not exposed.
 end note
 
 userSvc --> userDb
@@ -60,5 +66,17 @@ recSvc --> redis : cache results
 videoSvc --> kafka : publishes events
 userSvc --> kafka : publishes events
 kafka --> recSvc : consumes all topics
+
+note bottom of videoSvc
+  Platform uploads remain private until
+  an admin approves them. Only approved
+  videos emit video.uploaded and become public.
+end note
+
+note bottom of frontend
+  Admin dashboard aggregates service-local
+  metrics from /admin/users/dashboard and
+  /admin/videos/dashboard.
+end note
 
 @enduml

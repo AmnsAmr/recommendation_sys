@@ -2,7 +2,7 @@
 > Base URL (via gateway): `http://localhost:8080`
 > Direct service URL: `http://localhost:8081`
 > All responses: `Content-Type: application/json`
-> v2 changes: register accepts interests + displayName, profile response includes new fields, new US-05 update profile endpoint
+> v2 changes: register accepts interests + displayName, profile response includes new fields, new US-05 update profile endpoint, admin moderation endpoints added
 
 ---
 
@@ -52,6 +52,7 @@ Content-Type: application/json
 | `userId` | `string (UUID)` | Created user's ID |
 | `username` | `string` | Username |
 | `displayName` | `string` | Display name |
+| `role` | `string (enum)` | `"USER"` or `"ADMIN"` |
 | `expiresIn` | `integer` | Token TTL in seconds |
 
 ```json
@@ -60,6 +61,7 @@ Content-Type: application/json
   "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "username": "alice_dev",
   "displayName": "Alice",
+  "role": "USER",
   "expiresIn": 86400
 }
 ```
@@ -138,6 +140,7 @@ Content-Type: application/json
 | `userId` | `string (UUID)` | Authenticated user's ID |
 | `username` | `string` | Username |
 | `displayName` | `string` | Display name |
+| `role` | `string (enum)` | `"USER"` or `"ADMIN"` |
 | `expiresIn` | `integer` | Token TTL in seconds |
 
 ```json
@@ -146,6 +149,7 @@ Content-Type: application/json
   "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "username": "alice_dev",
   "displayName": "Alice",
+  "role": "USER",
   "expiresIn": 86400
 }
 ```
@@ -157,6 +161,7 @@ Content-Type: application/json
 | `400` | `VALIDATION_ERROR` | Missing field |
 | `401` | `INVALID_CREDENTIALS` | Email not found or wrong password |
 | `403` | `ACCOUNT_INACTIVE` | Account has been deactivated |
+| `403` | `ACCOUNT_BANNED` | Account has been banned by an admin |
 | `500` | `INTERNAL_ERROR` | Unexpected server error |
 
 ```json
@@ -215,6 +220,7 @@ Authorization: Bearer {jwt_token}
 | `bio` | `string \| null` | Short biography |
 | `profilePictureUrl` | `string \| null` | URL to avatar image |
 | `email` | `string` | Email address |
+| `role` | `string (enum)` | `"USER"` or `"ADMIN"` |
 | `preferences` | `array` | Category preferences |
 | `preferences[].category` | `string` | Category ID |
 | `preferences[].weight` | `number` | Preference weight 0.0–1.0 |
@@ -230,6 +236,7 @@ Authorization: Bearer {jwt_token}
   "bio": "Backend developer, coffee enthusiast.",
   "profilePictureUrl": "https://pub-xxx.r2.dev/avatars/alice.jpg",
   "email": "alice@example.com",
+  "role": "USER",
   "preferences": [
     { "category": "technology", "weight": 0.9 },
     { "category": "science", "weight": 0.6 }
@@ -308,6 +315,9 @@ Content-Type: application/json
 ```json
 {
   "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "username": "alice_dev",
+  "displayName": "Alice",
+  "role": "USER",
   "preferences": [
     { "category": "technology", "weight": 0.9 },
     { "category": "science", "weight": 0.6 }
@@ -389,6 +399,7 @@ Content-Type: application/json
   "displayName": "Alice Dev",
   "bio": "Backend developer, coffee enthusiast.",
   "profilePictureUrl": "https://pub-xxx.r2.dev/avatars/alice.jpg",
+  "role": "USER",
   "updatedAt": "2024-11-02T14:00:00Z"
 }
 ```
@@ -414,3 +425,264 @@ Content-Type: application/json
 
 ### Idempotency
 - **Yes** — same payload produces same result.
+
+---
+
+## US-06 — Admin User Dashboard
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/users/dashboard` |
+| Description | Returns user-side platform metrics for the admin dashboard. Covers user growth, active/banned counts, and latest registrations. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "totalUsers": 1240,
+  "activeUsers": 1201,
+  "bannedUsers": 19,
+  "adminUsers": 2,
+  "newUsersLast7Days": 87,
+  "latestUsers": [
+    {
+      "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "username": "alice_dev",
+      "displayName": "Alice",
+      "role": "USER",
+      "isActive": true,
+      "createdAt": "2024-11-02T14:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors**
+
+| Status | Code | Trigger |
+|---|---|---|
+| `401` | `UNAUTHORIZED` | Missing or invalid JWT |
+| `403` | `FORBIDDEN` | JWT role is not admin |
+| `500` | `INTERNAL_ERROR` | Unexpected server error |
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-07 — List Users For Moderation
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/users` |
+| Description | Returns a paginated list of users for moderation and management. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+**Query Parameters**
+
+| Parameter | Type | Required | Default | Example |
+|---|---|---|---|---|
+| `page` | `integer` | No | `0` | `0` |
+| `size` | `integer` | No | `20` | `20` |
+| `active` | `boolean` | No | — | `true` |
+| `role` | `string (enum)` | No | — | `ADMIN` |
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "users": [
+    {
+      "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "email": "alice@example.com",
+      "username": "alice_dev",
+      "displayName": "Alice",
+      "role": "USER",
+      "isActive": true,
+      "bannedAt": null,
+      "createdAt": "2024-11-02T14:00:00Z"
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-08 — Get User For Admin
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `GET` |
+| URL Path | `/admin/users/{userId}` |
+| Description | Returns full user details for admin review, including moderation state and preferences. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 200 OK**
+
+```json
+{
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "email": "alice@example.com",
+  "username": "alice_dev",
+  "displayName": "Alice",
+  "bio": "Backend developer",
+  "profilePictureUrl": "https://pub-xxx.r2.dev/avatars/alice.jpg",
+  "role": "USER",
+  "isActive": true,
+  "banReason": null,
+  "bannedAt": null,
+  "preferences": [
+    { "category": "technology", "weight": 0.9 }
+  ],
+  "createdAt": "2024-11-01T10:30:00Z",
+  "updatedAt": "2024-11-02T14:00:00Z"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-09 — Update User As Admin
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `PUT` |
+| URL Path | `/admin/users/{userId}` |
+| Description | Allows an admin to change display name, role, or moderation-relevant profile fields for a user. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+Content-Type: application/json
+```
+
+**Request Body**
+
+```json
+{
+  "displayName": "Alice Updated",
+  "bio": "Updated by admin",
+  "profilePictureUrl": "https://pub-xxx.r2.dev/avatars/alice.jpg",
+  "role": "USER"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-10 — Ban User
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `PUT` |
+| URL Path | `/admin/users/{userId}/ban` |
+| Description | Bans a user account. Banned users cannot authenticate or interact with the platform. Emits `user.events` with `eventType = banned`. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+Content-Type: application/json
+```
+
+**Request Body**
+
+```json
+{
+  "reason": "Repeated spam uploads"
+}
+```
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-11 — Unban User
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `PUT` |
+| URL Path | `/admin/users/{userId}/unban` |
+| Description | Restores a banned user account. |
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**
+
+---
+
+## US-12 — Delete User
+
+| Field | Value |
+|---|---|
+| Service | user-service |
+| HTTP Method | `DELETE` |
+| URL Path | `/admin/users/{userId}` |
+| Description | Deletes a user account and its local preferences. Emits `user.events` with `eventType = deleted`. |
+
+### Request
+
+**Headers**
+```
+Authorization: Bearer {admin_jwt}
+```
+
+### Response
+
+**Success — 204 No Content**
+
+### Security
+- Authentication required: **Yes**
+- Admin role required: **Yes**

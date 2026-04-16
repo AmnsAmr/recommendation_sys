@@ -12,7 +12,7 @@
 | Service | recommendation-service |
 | HTTP Method | `GET` |
 | URL Path | `/recommendations/{userId}` |
-| Description | Returns a ranked list of video IDs personalized for the user. Served from Redis cache when available. Cache TTL: 10 minutes. Invalidated on each new interaction event. |
+| Description | Returns a ranked list of publicly visible video IDs personalized for the user. Served from Redis cache when available. Cache TTL: 10 minutes. Invalidated on each new interaction event. |
 
 ### Request
 
@@ -116,7 +116,7 @@ Authorization: Bearer {jwt_token}
 | Service | recommendation-service |
 | HTTP Method | `GET` |
 | URL Path | `/recommendations/similar/{videoId}` |
-| Description | Returns videos similar to a given video using item-item cosine similarity on tag/category vectors. |
+| Description | Returns publicly visible videos similar to a given video using item-item cosine similarity on tag/category vectors. |
 
 ### Request
 
@@ -196,7 +196,7 @@ Authorization: Bearer {jwt_token}
 | Service | recommendation-service |
 | HTTP Method | `GET` |
 | URL Path | `/recommendations/cold/{categoryId}` |
-| Description | Returns top videos for a given category. Used for new users with no interaction history. Does not require authentication. |
+| Description | Returns top publicly visible videos for a given category. Used for new users with no interaction history. Does not require authentication. |
 
 ### Request
 

@@ -6,7 +6,7 @@
 ## What This Service Does
 
 Single entry point for all client requests. Routes to the correct service, validates JWT on protected routes,
-and forwards the extracted X-User-Id header. Contains minimal business logic.
+and forwards the extracted X-User-Id and X-User-Role headers. Contains minimal business logic.
 
 ---
 
@@ -18,6 +18,7 @@ and forwards the extracted X-User-Id header. Contains minimal business logic.
 - [ ] Route config for recommendation-service
 - [ ] JWT validation filter
 - [ ] X-User-Id header injection
+- [ ] X-User-Role header injection
 - [ ] Internal trust signal (X-Internal-Token or mTLS)
 
 ---
@@ -55,7 +56,8 @@ org.vidrec.apigateway
 ## Key Business Rules
 
 1. JWT validation happens at the gateway.
-2. On valid JWT -> strip Authorization header, add X-User-Id.
+2. On valid JWT -> strip Authorization header, add X-User-Id and X-User-Role.
 3. On invalid JWT on protected route -> return 401.
 4. Service URLs come from env vars.
 5. Enforce internal trust boundary (only gateway can call services).
+6. Admin endpoints stay protected end-to-end; role forwarding must be consistent for `/admin/**` routes.

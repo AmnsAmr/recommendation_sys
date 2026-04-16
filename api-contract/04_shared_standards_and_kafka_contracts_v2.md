@@ -35,6 +35,7 @@ Every error response across all services follows this exact format:
 | `TOKEN_EXPIRED` | 401 | JWT is valid but expired |
 | `FORBIDDEN` | 403 | Valid JWT but user lacks permission |
 | `ACCOUNT_INACTIVE` | 403 | Account has been deactivated |
+| `ACCOUNT_BANNED` | 403 | Account has been banned by an admin |
 | `NOT_FOUND` | 404 | Generic -- when specific code not available |
 | `VALIDATION_ERROR` | 400 | Request body or params failed validation |
 | `INTERNAL_ERROR` | 500 | Unhandled server exception |
@@ -50,12 +51,14 @@ JWT payload:
 {
   "sub": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "username": "alice_dev",
+  "role": "USER",
   "iat": 1698825600,
   "exp": 1698912000
 }
 ```
 
 The `sub` field is the `userId`. Downstream services receive it as the `X-User-Id` header after gateway validation.
+The `role` field is forwarded as `X-User-Role` so admin-only routes can be enforced consistently by downstream services.
 
 Internal trust boundary (must enforce at least one option):
 1. Gateway adds `X-Internal-Token` (shared secret). Services verify it.
@@ -220,7 +223,7 @@ DLQ topics:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `eventId` | `string (UUID)` | Yes | Unique event ID |
-| `videoId` | `string` | Yes | Newly available video |
+| `videoId` | `string` | Yes | Newly approved and publicly visible video |
 | `title` | `string` | Yes | Video title |
 | `description` | `string` | No | Video description |
 | `tags` | `array[string]` | Yes | Content tags |
@@ -245,6 +248,8 @@ DLQ topics:
 }
 ```
 
+Only admin-approved platform uploads and public YouTube imports should emit this event.
+
 **Action by consumer:**
 - Creates or updates `item_factors` record with tag/category/language vector
 - Stores `thumbnailUrl` in `item_factors` so recommendation-service can return it without calling video-service
@@ -263,10 +268,11 @@ DLQ topics:
 |---|---|---|---|
 | `eventId` | `string (UUID)` | Yes | Unique event ID |
 | `userId` | `string (UUID)` | Yes | User ID |
-| `eventType` | `string (enum)` | Yes | `"registered"`, `"deactivated"`, `"prefs_updated"` |
+| `eventType` | `string (enum)` | Yes | `"registered"`, `"deactivated"`, `"prefs_updated"`, `"banned"`, `"deleted"` |
 | `username` | `string` | No | Required when eventType = registered |
 | `interests` | `array[string]` | No | Required when eventType = registered |
 | `preferences` | `array[string]` | No | Required when eventType = prefs_updated |
+| `reason` | `string` | No | Optional moderation reason for banned/deleted |
 | `timestamp` | `string (ISO-8601)` | Yes | When the event occurred |
 
 ```json
@@ -284,7 +290,8 @@ DLQ topics:
 {
   "eventId": "b6c7d8e9-f012-3456-abcd-678901234567",
   "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "eventType": "deactivated",
+  "eventType": "banned",
+  "reason": "Repeated spam uploads",
   "timestamp": "2024-11-01T10:50:00Z"
 }
 ```
@@ -301,6 +308,7 @@ DLQ topics:
 
 **Action by consumer:**
 - If eventType = registered: insert UserCategoryProfile per interest (weight=1.0, source=declared)
+- If eventType = banned or deleted: invalidate recommendation cache and ignore future activity until the account is active again
 
 ---
 
@@ -315,6 +323,13 @@ DLQ topics:
 | US-03 | GET | `/users/{userId}/profile` | Yes | Returns `displayName`, `bio`, `profilePictureUrl`, `isActive`, `updatedAt` |
 | US-04 | PUT | `/users/{userId}/preferences` | Yes | No change |
 | US-05 | PUT | `/users/{userId}/profile` | Yes | NEW -- update displayName, bio, profilePictureUrl |
+| US-06 | GET | `/admin/users/dashboard` | Admin | NEW -- user/admin dashboard metrics |
+| US-07 | GET | `/admin/users` | Admin | NEW -- moderation list of users |
+| US-08 | GET | `/admin/users/{userId}` | Admin | NEW -- inspect one user in detail |
+| US-09 | PUT | `/admin/users/{userId}` | Admin | NEW -- edit role or profile/admin fields |
+| US-10 | PUT | `/admin/users/{userId}/ban` | Admin | NEW -- ban a user account |
+| US-11 | PUT | `/admin/users/{userId}/unban` | Admin | NEW -- restore a banned user |
+| US-12 | DELETE | `/admin/users/{userId}` | Admin | NEW -- delete a user account |
 
 ### Video Service
 
@@ -329,6 +344,13 @@ DLQ topics:
 | VS-07 | POST | `/videos/{videoId}/like` | Yes | Response includes updated `likeCount` + `dislikeCount` |
 | VS-08 | GET | `/videos/catalog` | No | Accepts `language` filter param, returns `thumbnailUrl`, `viewCount`, `likeCount`, `dislikeCount` |
 | VS-09 | POST | `/videos/search/click` | Yes | No change |
+| VS-10 | GET | `/admin/videos/dashboard` | Admin | NEW -- platform upload and moderation dashboard |
+| VS-11 | GET | `/admin/videos/pending` | Admin | NEW -- moderation queue |
+| VS-12 | GET | `/admin/videos/{videoId}` | Admin | NEW -- inspect one uploaded video |
+| VS-13 | PUT | `/admin/videos/{videoId}` | Admin | NEW -- edit uploaded video metadata |
+| VS-14 | POST | `/admin/videos/{videoId}/approve` | Admin | NEW -- publish video after review |
+| VS-15 | POST | `/admin/videos/{videoId}/reject` | Admin | NEW -- reject video with moderation notes |
+| VS-16 | DELETE | `/admin/videos/{videoId}` | Admin | NEW -- delete a platform-uploaded video |
 
 ### Recommendation Service
 

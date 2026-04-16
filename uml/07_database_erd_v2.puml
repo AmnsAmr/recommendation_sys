@@ -19,9 +19,12 @@ package "user_schema" #E8F4F8 {
     * password_hash : VARCHAR
     * username : VARCHAR(100) <<UNIQUE>>
     * display_name : VARCHAR(100)
+    * role : VARCHAR(20) = 'USER'
     bio : TEXT
     profile_picture_url : VARCHAR
     * is_active : BOOLEAN = true
+    banned_at : TIMESTAMP
+    ban_reason : VARCHAR(255)
     * created_at : TIMESTAMP
     * updated_at : TIMESTAMP
   }
@@ -56,7 +59,11 @@ package "video_schema" #F0F8E8 {
     * like_count : BIGINT = 0
     * dislike_count : BIGINT = 0
     language : VARCHAR(10) = 'en'
-    * status : ENUM(pending, processing, ready, failed)
+    * status : ENUM(pending, processing, under_review, ready, rejected, failed)
+    moderation_notes : VARCHAR(500)
+    reviewed_by : UUID
+    reviewed_at : TIMESTAMP
+    published_at : TIMESTAMP
     * created_at : TIMESTAMP
     * updated_at : TIMESTAMP
   }

@@ -43,6 +43,7 @@ public class UserService {
             .passwordHash(passwordEncoder.encode(request.password()))
             .username(request.username())
             .displayName(request.displayName())
+            .role(UserRole.USER)
             .isActive(true)
             .build();
         user = userRepository.save(user);
@@ -70,8 +71,7 @@ public class UserService {
             .build();
         eventPublisher.publishAfterCommit(event);
 
-        String token = jwtUtil.generateToken(user.getId());
-        return new AuthResponse(token, user.getId(), user.getUsername(), user.getDisplayName(), jwtUtil.getExpirationMs() / 1000);
+        return toAuthResponse(user);
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -79,6 +79,9 @@ public class UserService {
             .orElseThrow(() -> unauthorized("INVALID_CREDENTIALS", "Email or password is incorrect."));
 
         if (!user.isActive()) {
+            if (user.getBannedAt() != null) {
+                throw forbidden("ACCOUNT_BANNED", "Account has been banned by an admin.");
+            }
             throw forbidden("ACCOUNT_INACTIVE", "Account has been deactivated.");
         }
 
@@ -86,30 +89,13 @@ public class UserService {
             throw unauthorized("INVALID_CREDENTIALS", "Email or password is incorrect.");
         }
 
-        String token = jwtUtil.generateToken(user.getId());
-        return new AuthResponse(token, user.getId(), user.getUsername(), user.getDisplayName(), jwtUtil.getExpirationMs() / 1000);
+        return toAuthResponse(user);
     }
 
     public UserProfileResponse getProfile(UUID userId) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> notFound("USER_NOT_FOUND", "No user with this ID."));
-        List<PreferenceDTO> prefs = preferenceRepository.findByUserId(userId)
-            .stream()
-            .map(p -> new PreferenceDTO(p.getCategory(), p.getWeight()))
-            .collect(Collectors.toList());
-
-        return new UserProfileResponse(
-            user.getId(),
-            user.getUsername(),
-            user.getDisplayName(),
-            user.getBio(),
-            user.getProfilePictureUrl(),
-            user.getEmail(),
-            prefs,
-            user.isActive(),
-            user.getCreatedAt(),
-            user.getUpdatedAt()
-        );
+        return toUserProfileResponse(user);
     }
 
     @Transactional
@@ -132,7 +118,7 @@ public class UserService {
         }
 
         userRepository.save(user);
-        return getProfile(userId);
+        return toUserProfileResponse(user);
     }
 
     @Transactional
@@ -164,7 +150,7 @@ public class UserService {
             .build();
         eventPublisher.publishAfterCommit(event);
 
-        return getProfile(userId);
+        return toUserProfileResponse(user);
     }
 
     @Transactional
@@ -181,6 +167,41 @@ public class UserService {
             .timestamp(Instant.now())
             .build();
         eventPublisher.publishAfterCommit(event);
+    }
+
+    public List<PreferenceDTO> getPreferences(UUID userId) {
+        return preferenceRepository.findByUserId(userId)
+            .stream()
+            .map(p -> new PreferenceDTO(p.getCategory(), p.getWeight()))
+            .collect(Collectors.toList());
+    }
+
+    private AuthResponse toAuthResponse(User user) {
+        String token = jwtUtil.generateToken(user.getId(), user.getRole());
+        return new AuthResponse(
+            token,
+            user.getId(),
+            user.getUsername(),
+            user.getDisplayName(),
+            user.getRole().name(),
+            jwtUtil.getExpirationMs() / 1000
+        );
+    }
+
+    private UserProfileResponse toUserProfileResponse(User user) {
+        return new UserProfileResponse(
+            user.getId(),
+            user.getUsername(),
+            user.getDisplayName(),
+            user.getBio(),
+            user.getProfilePictureUrl(),
+            user.getEmail(),
+            user.getRole().name(),
+            getPreferences(user.getId()),
+            user.isActive(),
+            user.getCreatedAt(),
+            user.getUpdatedAt()
+        );
     }
 
     private ApiException conflict(String code, String message) {

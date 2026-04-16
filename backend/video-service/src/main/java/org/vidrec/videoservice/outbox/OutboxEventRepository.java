@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> {
     List<OutboxEvent> findByStatusOrderByCreatedAtAsc(String status);
+    void deleteByAggregateId(String aggregateId);
 }

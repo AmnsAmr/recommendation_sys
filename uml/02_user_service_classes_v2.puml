@@ -25,14 +25,22 @@ package "user-service" {
       - passwordHash: String
       - username: String
       - displayName: String
+      - role: UserRole
       - bio: String
       - profilePictureUrl: String
       - isActive: boolean
+      - bannedAt: LocalDateTime
+      - banReason: String
       - createdAt: LocalDateTime
       - updatedAt: LocalDateTime
       + getId(): UUID
       + getEmail(): String
       + isActive(): boolean
+    }
+
+    enum UserRole {
+      USER
+      ADMIN
     }
 
     class UserPreference {
@@ -65,6 +73,7 @@ package "user-service" {
       + token: String
       + userId: UUID
       + username: String
+      + role: String
       + expiresIn: Long
     }
 
@@ -75,6 +84,7 @@ package "user-service" {
       + bio: String
       + profilePictureUrl: String
       + preferences: List<PreferenceDTO>
+      + role: String
       + createdAt: LocalDateTime
     }
 
@@ -124,6 +134,75 @@ package "user-service" {
     }
   }
 
+  package "admin" {
+    class AdminUserController {
+      - adminUserService: AdminUserService
+      + getDashboard(): ResponseEntity<AdminDashboardResponse>
+      + listUsers(page: int, size: int): ResponseEntity<Page<AdminUserSummaryResponse>>
+      + getUser(userId: UUID): ResponseEntity<AdminUserDetailResponse>
+      + updateUser(userId: UUID, request: AdminUpdateUserRequest): ResponseEntity<AdminUserDetailResponse>
+      + banUser(userId: UUID, request: AdminBanUserRequest): ResponseEntity<AdminUserDetailResponse>
+      + unbanUser(userId: UUID): ResponseEntity<AdminUserDetailResponse>
+      + deleteUser(userId: UUID): ResponseEntity<Void>
+    }
+
+    class AdminUserService {
+      - userRepository: UserRepository
+      - preferenceRepository: UserPreferenceRepository
+      - eventPublisher: UserEventPublisher
+      + getDashboard(): AdminDashboardResponse
+      + listUsers(page: int, size: int): Page<AdminUserSummaryResponse>
+      + getUser(userId: UUID): AdminUserDetailResponse
+      + updateUser(userId: UUID, request: AdminUpdateUserRequest): AdminUserDetailResponse
+      + banUser(userId: UUID, request: AdminBanUserRequest): AdminUserDetailResponse
+      + unbanUser(userId: UUID): AdminUserDetailResponse
+      + deleteUser(userId: UUID): void
+    }
+
+    class AdminDashboardResponse {
+      + totalUsers: long
+      + activeUsers: long
+      + bannedUsers: long
+      + adminUsers: long
+      + newUsersLast7Days: long
+    }
+
+    class AdminUserSummaryResponse {
+      + userId: UUID
+      + email: String
+      + username: String
+      + displayName: String
+      + role: String
+      + isActive: boolean
+      + bannedAt: LocalDateTime
+      + createdAt: LocalDateTime
+    }
+
+    class AdminUserDetailResponse {
+      + userId: UUID
+      + email: String
+      + username: String
+      + displayName: String
+      + role: String
+      + isActive: boolean
+      + banReason: String
+      + preferences: List<PreferenceDTO>
+      + createdAt: LocalDateTime
+      + updatedAt: LocalDateTime
+    }
+
+    class AdminUpdateUserRequest {
+      + displayName: String
+      + bio: String
+      + profilePictureUrl: String
+      + role: String
+    }
+
+    class AdminBanUserRequest {
+      + reason: String
+    }
+  }
+
   package "service" {
     class UserService {
       - userRepository: UserRepository
@@ -158,13 +237,18 @@ package "user-service" {
     class JwtUtil {
       - secret: String
       - expiration: Long
-      + generateToken(userId: UUID): String
+      + generateToken(userId: UUID, role: String): String
       + validateToken(token: String): boolean
       + extractUserId(token: String): UUID
+      + extractRole(token: String): String
     }
   }
 
   UserController --> UserService
+  AdminUserController --> AdminUserService
+  AdminUserService --> UserRepository
+  AdminUserService --> UserPreferenceRepository
+  AdminUserService --> UserEventPublisher
   UserService --> UserRepository
   UserService --> UserPreferenceRepository
   UserService --> JwtUtil
@@ -174,17 +258,20 @@ package "user-service" {
 note bottom of User
   v2 changes:
   + displayName (shown publicly, different from username)
+  + role (USER / ADMIN)
   + bio (short user description)
   + profilePictureUrl (URL to avatar image)
-  + isActive (soft delete / ban flag)
+  + isActive (account active flag)
+  + bannedAt / banReason (admin moderation)
   + updatedAt (track profile edits)
   + Register now accepts initial interests
 end note
 
 note bottom of UserService
   User events are published after commit:
-  user.registered, user.deactivated,
-  user.prefs.updated.
+  user.events with eventType:
+  registered, deactivated,
+  prefs_updated, banned, deleted.
 end note
 
 @enduml

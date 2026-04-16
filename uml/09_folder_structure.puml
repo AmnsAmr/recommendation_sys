@@ -24,6 +24,7 @@ salt
     +++ user-service/                   | Spring Boot -- port 8081
     ++++ src/main/java/org/vidrec/userservice/
     +++++ user/
+    +++++ admin/
     +++++ preference/
     +++++ event/
     +++++ kafka/
@@ -35,6 +36,7 @@ salt
     +++ video-service/                  | Spring Boot -- port 8082
     ++++ src/main/java/org/vidrec/videoservice/
     +++++ video/
+    +++++ admin/
     +++++ watch/
     +++++ catalog/
     +++++ youtube/

@@ -73,6 +73,18 @@ public class Video {
     @Column(nullable = false)
     private VideoStatus status;
 
+    @Column(name = "moderation_notes", length = 500)
+    private String moderationNotes;
+
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

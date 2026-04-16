@@ -79,7 +79,8 @@ org.vidrec.recommendationservice
 8. user.events:
    - registered: insert user_category_profiles (source=declared)
    - prefs_updated: replace user_category_profiles (source=declared)
-   - deactivated: invalidate cache for userId
+   - deactivated / banned / deleted: invalidate cache for userId
+9. Only admin-approved platform uploads should ever reach recommendation-service as `video.uploaded`.
 
 ---
 
