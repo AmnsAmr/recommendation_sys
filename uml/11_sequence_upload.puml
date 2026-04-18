@@ -1,0 +1,75 @@
+@startuml Sequence_Publication_Video
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam SequenceArrowColor #555555
+skinparam SequenceLifeLineBorderColor #888888
+skinparam SequenceBoxBorderColor #333333
+
+title Diagramme de séquence -- Publication d'une vidéo
+mainframe **sd** Publication d'une vidéo
+
+actor       "Utilisateur"     as U
+actor       "Administrateur"  as A
+participant "Système"         as S
+database    "Base de données" as DB
+
+' 1. Authentification (reusable fragment, PPT rule SD6)
+ref over U, S, DB : Authentification (voir séquence dédiée)
+
+' 2. Métadonnées
+U  -> S  : Saisir titre + description + catégorie
+activate S
+S  -> DB : Créer la vidéo (statut = En attente)
+activate DB
+DB --> S : Identifiant vidéo
+deactivate DB
+S --> U  : Jeton de téléversement
+deactivate S
+
+' 3. Téléversement
+U  -> S  : Téléverser le fichier vidéo
+activate S
+S  -> S  : Vérifier le jeton
+S  -> S  : Stocker le fichier
+S  -> DB : Mettre à jour statut = En revue
+activate DB
+DB --> S : OK
+deactivate DB
+S --> U  : Confirmation (en attente de modération)
+deactivate S
+
+' 4. Modération
+ref over A, S, DB : Authentification (voir séquence dédiée)
+A -> S : Consulter la file d'attente de modération
+activate S
+S -> DB : Charger les vidéos en revue
+activate DB
+DB --> S : Liste des vidéos
+deactivate DB
+S --> A : File de modération
+deactivate S
+
+alt Vidéo approuvée
+  A -> S : Approuver la vidéo
+  activate S
+  S -> DB : Mettre à jour statut = Publiée
+  activate DB
+  DB --> S : OK
+  deactivate DB
+  S -> S : Notifier le module de recommandation
+  S --> A : Vidéo publiée
+  S --> U : Notification : vidéo publiée
+  deactivate S
+else Vidéo rejetée
+  A -> S : Rejeter la vidéo (motif)
+  activate S
+  S -> DB : Mettre à jour statut = Rejetée + motif
+  activate DB
+  DB --> S : OK
+  deactivate DB
+  S --> A : Vidéo rejetée
+  S --> U : Notification : vidéo rejetée
+  deactivate S
+end
+@enduml

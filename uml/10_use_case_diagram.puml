@@ -1,0 +1,88 @@
+@startuml Cas_d_utilisation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam usecaseBackgroundColor #FAFAFA
+skinparam usecaseBorderColor #555555
+skinparam actorBorderColor #333333
+left to right direction
+
+title Diagramme de cas d'utilisation -- Plateforme Vidéo
+
+' --- Actors (outside) + actor generalization, PPT rule UC6 ---
+:Utilisateur:    as user
+:Administrateur: as admin
+admin --|> user
+
+rectangle "Plateforme Vidéo" {
+  usecase "S'inscrire"                    as UC_Register
+  usecase "Se connecter"                  as UC_Login
+  usecase "Authentification"              as UC_Auth
+  usecase "Génération jeton"              as UC_JWT
+  usecase "Choisir ses centres\nd'intérêt" as UC_Interests
+  usecase "Consulter le catalogue"        as UC_Catalog
+  usecase "Rechercher une vidéo"          as UC_Search
+  usecase "Regarder une vidéo"            as UC_Watch
+  usecase "Obtenir des\nrecommandations"  as UC_Reco
+  usecase "Aimer / Ne pas aimer"          as UC_Like
+  usecase "Revisionner"                   as UC_Rewatch
+  usecase "Publier une vidéo"             as UC_Upload
+  usecase "Téléverser le fichier"         as UC_UploadFile
+  usecase "Renseigner les\nmétadonnées"   as UC_Metadata
+  usecase "Gérer son profil"              as UC_Profile
+  usecase "Mettre à jour ses\npréférences" as UC_UpdatePrefs
+
+  rectangle "Modération & Administration" {
+    usecase "Modérer les vidéos"          as UC_Moderate
+    usecase "Approuver"                   as UC_Approve
+    usecase "Rejeter"                     as UC_Reject
+    usecase "Gérer les utilisateurs"      as UC_ManageUsers
+    usecase "Bannir un utilisateur"       as UC_Ban
+    usecase "Consulter le\ntableau de bord" as UC_Dashboard
+  }
+}
+
+' --- Associations ---
+user  -- UC_Register
+user  -- UC_Login
+user  -- UC_Catalog
+user  -- UC_Search
+user  -- UC_Watch
+user  -- UC_Reco
+user  -- UC_Like
+user  -- UC_Profile
+user  -- UC_Upload
+admin -- UC_Moderate
+admin -- UC_ManageUsers
+admin -- UC_Dashboard
+
+' --- «include» ---
+UC_Login    ..> UC_Auth       : <<include>>
+UC_Login    ..> UC_JWT        : <<include>>
+UC_Register ..> UC_Interests  : <<include>>
+UC_Upload   ..> UC_UploadFile : <<include>>
+UC_Upload   ..> UC_Metadata   : <<include>>
+
+' --- «extend» ---
+UC_Rewatch     ..> UC_Watch       : <<extend>>
+UC_UpdatePrefs ..> UC_Profile     : <<extend>>
+UC_Approve     ..> UC_Moderate    : <<extend>>
+UC_Reject      ..> UC_Moderate    : <<extend>>
+UC_Ban         ..> UC_ManageUsers : <<extend>>
+
+' --- NFRs as notes (PPT rule UC7) ---
+note right of UC_Watch
+  Disponibilité 99.9%
+  Latence démarrage < 2s
+end note
+note bottom of UC_Reco
+  Personnalisation basée sur
+  l'historique + préférences déclarées
+  Cache 10 min
+end note
+note top of UC_Moderate
+  Toute vidéo téléversée reste
+  privée jusqu'à approbation
+  par un administrateur
+end note
+@enduml

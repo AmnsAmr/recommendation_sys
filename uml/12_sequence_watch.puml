@@ -1,0 +1,81 @@
+@startuml Sequence_Visionnage
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam SequenceArrowColor #555555
+skinparam SequenceLifeLineBorderColor #888888
+skinparam SequenceBoxBorderColor #333333
+
+title Diagramme de séquence -- Visionnage & mise à jour des recommandations
+mainframe **sd** Visionnage d'une vidéo
+
+actor       "Utilisateur"      as U
+participant "Système"          as S
+database    "Base de données"  as DB
+
+ref over U, S, DB : Authentification (voir séquence dédiée)
+
+' 2. Lecture
+U -> S : Cliquer sur une vidéo
+activate S
+S -> DB : Charger la vidéo
+activate DB
+DB --> S : Détails de la vidéo
+deactivate DB
+S --> U : Lecteur vidéo
+deactivate S
+
+' 3. Suivi visionnage
+U -> S : Envoyer la progression (durée, pourcentage)
+activate S
+S -> S : Calculer le score de visionnage
+S -> DB : Enregistrer la session de visionnage
+activate DB
+DB --> S : OK
+deactivate DB
+S -> S : Mettre à jour le profil utilisateur
+S --> U : Accusé de réception
+deactivate S
+
+' 4. Engagement
+alt L'utilisateur aime la vidéo
+  U -> S : Aimer la vidéo
+  activate S
+  S -> DB : Enregistrer l'interaction (aimée)
+  activate DB
+  DB --> S : OK
+  deactivate DB
+  S -> S : Recalculer les affinités
+  S --> U : Confirmation
+  deactivate S
+else L'utilisateur n'aime pas
+  U -> S : Ne pas aimer
+  activate S
+  S -> DB : Enregistrer l'interaction (pas aimée)
+  activate DB
+  DB --> S : OK
+  deactivate DB
+  S --> U : Confirmation
+  deactivate S
+end
+
+' 5. Nouvelles recommandations
+U -> S : Revenir à l'accueil
+activate S
+S -> S : Vérifier les recommandations en cache
+note right of S
+  Cache invalidé après visionnage.
+  Recalcul nécessaire.
+end note
+S -> DB : Charger historique + préférences
+activate DB
+DB --> S : Données utilisateur
+deactivate DB
+S -> S : Calculer les recommandations
+S -> DB : Mettre en cache le résultat
+activate DB
+DB --> S : OK
+deactivate DB
+S --> U : Liste de vidéos recommandées
+deactivate S
+@enduml
