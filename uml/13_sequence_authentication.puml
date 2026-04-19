@@ -1,0 +1,41 @@
+@startuml Sequence_Authentification
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam SequenceArrowColor #555555
+skinparam SequenceLifeLineBorderColor #888888
+skinparam SequenceBoxBorderColor #333333
+
+title Diagramme de séquence -- Authentification (fragment réutilisable)
+mainframe **sd** Authentification
+
+actor       "Utilisateur"     as U
+participant "Système"         as S
+database    "Base de données" as DB
+
+U  -> S  : Cliquer sur "Se connecter"
+activate S
+S --> U  : Page de connexion
+deactivate S
+
+U  -> S  : Saisir e-mail + mot de passe
+activate S
+S  -> DB : Vérifier les identifiants
+activate DB
+DB --> S : Résultat de la vérification
+deactivate DB
+
+alt Identifiants corrects
+  S -> S : Générer le jeton de session
+  S -> DB : Enregistrer la session
+  activate DB
+  DB --> S : OK
+  deactivate DB
+  S --> U : Redirection vers la page d'accueil
+else Identifiants incorrects
+  S --> U : Message d'erreur : introuvable
+else Compte banni
+  S --> U : Message : compte suspendu
+end
+deactivate S
+@enduml

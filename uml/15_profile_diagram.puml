@@ -1,0 +1,52 @@
+@startuml Diagramme_de_profil
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #555555
+skinparam ClassBackgroundColor #F8F8F8
+
+title Diagramme de profil -- Stéréotypes de la plateforme vidéo
+
+class "«Metaclass»\nPackage"   as MPackage  <<Metaclass>>
+class "«Metaclass»\nClass"     as MClass    <<Metaclass>>
+class "«Metaclass»\nOperation" as MOp       <<Metaclass>>
+
+class "«Stereotype»\nSousSystème" as SSubsystem <<Stereotype>> {
+  + nom : String [1]
+  + responsable : String [0..1]
+}
+
+class "«Stereotype»\nSupervisionSystème" as SSurv <<Stereotype>> {
+  + Disponibilité : Réel [1]
+  + TransactionsSimultanées : Entier [1]
+}
+
+class "«Stereotype»\nEnumeration" as SEnum <<Stereotype>>
+
+class "«Stereotype»\nFonctionRecommandation" as SFReco <<Stereotype>> {
+  + stratégie : String [1]
+}
+
+SSubsystem --|> MPackage
+SSurv      --|> MClass
+SEnum      --|> MClass
+SFReco     --|> MOp
+
+SSubsystem "1" *-- "1..*" SSurv  : contient
+SSurv      "1" *-- "*"    SFReco : expose
+
+note bottom of SSubsystem
+  Regroupe les classes d'un même
+  domaine fonctionnel (GestionUtilisateurs,
+  GestionVidéos, Recommandation).
+end note
+note bottom of SSurv
+  Classe portant les contraintes
+  non fonctionnelles sous forme
+  {Disponibilité = ... , TransactionsSimultanées = ...}.
+end note
+note bottom of SFReco
+  Opération impliquant un calcul
+  de recommandation (SVD, cosinus, etc.).
+end note
+@enduml
