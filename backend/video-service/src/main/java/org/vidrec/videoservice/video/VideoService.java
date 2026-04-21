@@ -8,6 +8,9 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -151,6 +154,156 @@ public class VideoService {
             thumbnailUrl,
             videoUrl,
             video.getUpdatedAt()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public VideoResponse getVideo(String videoId) {
+        Video video = videoRepository.findById(videoId)
+            .filter(v -> v.getStatus() == VideoStatus.READY)
+            .orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, "VIDEO_NOT_FOUND",
+                "No video with id: " + videoId, List.of()));
+        return toVideoResponse(video, loadTags(videoId));
+    }
+
+    @Transactional(readOnly = true)
+    public VideoUserListResponse getUserVideos(UUID userId, int page, int size) {
+        Pageable pageable = pageable(page, size);
+        Page<Video> videos = videoRepository.findByUploaderIdAndStatusOrderByCreatedAtDesc(
+            userId, VideoStatus.READY, pageable);
+        List<VideoUserListItem> items = videos.stream()
+            .map(v -> toUserListItem(v, loadTags(v.getId())))
+            .toList();
+        return new VideoUserListResponse(items, videos.getNumber(), videos.getSize(), videos.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public VideoSearchResponse search(String query, int page, int size) {
+        if (query == null || query.trim().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Query parameter 'q' is required.", List.of());
+        }
+        String trimmed = query.trim();
+        Pageable pageable = pageable(page, size);
+        Page<Video> videos = videoRepository.search(trimmed, VideoStatus.READY, pageable);
+        List<VideoSearchItem> items = videos.stream()
+            .map(v -> toSearchItem(v, loadTags(v.getId())))
+            .toList();
+        return new VideoSearchResponse(trimmed, items, videos.getNumber(), videos.getSize(), videos.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public VideoCatalogResponse getCatalog(String categoryId, String source, String language, int page, int size) {
+        VideoSource sourceEnum = parseSource(source);
+        Pageable pageable = pageable(page, size);
+        Page<Video> videos = videoRepository.findCatalog(
+            VideoStatus.READY, categoryId, sourceEnum, language, pageable);
+        List<VideoCatalogItem> items = videos.stream()
+            .map(v -> toCatalogItem(v, loadTags(v.getId())))
+            .toList();
+        return new VideoCatalogResponse(items, videos.getNumber(), videos.getSize(), videos.getTotalElements());
+    }
+
+    private Pageable pageable(int page, int size) {
+        if (page < 0 || size <= 0 || size > 100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Invalid page or size.", List.of());
+        }
+        return PageRequest.of(page, size);
+    }
+
+    private VideoSource parseSource(String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        try {
+            return VideoSource.valueOf(source.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                "Invalid source: " + source, List.of());
+        }
+    }
+
+    private List<String> loadTags(String videoId) {
+        return videoTagRepository.findByIdVideoId(videoId).stream()
+            .map(tag -> tag.getId().getTag())
+            .toList();
+    }
+
+    private VideoResponse toVideoResponse(Video video, List<String> tags) {
+        String url = video.getSource() == VideoSource.OWN && video.getS3Key() != null
+            ? r2StorageService.getPublicUrl(video.getS3Key())
+            : null;
+        return new VideoResponse(
+            video.getId(),
+            video.getTitle(),
+            video.getDescription(),
+            video.getCategoryId(),
+            tags,
+            video.getSource().name().toLowerCase(),
+            video.getYoutubeId(),
+            url,
+            video.getThumbnailUrl(),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getLikeCount(),
+            video.getDislikeCount(),
+            video.getLanguage(),
+            video.getUploaderId(),
+            video.getStatus().name(),
+            video.getCreatedAt()
+        );
+    }
+
+    private VideoUserListItem toUserListItem(Video video, List<String> tags) {
+        return new VideoUserListItem(
+            video.getId(),
+            video.getTitle(),
+            video.getCategoryId(),
+            tags,
+            video.getThumbnailUrl(),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getLikeCount(),
+            video.getDislikeCount(),
+            video.getLanguage(),
+            video.getStatus().name(),
+            video.getCreatedAt()
+        );
+    }
+
+    private VideoSearchItem toSearchItem(Video video, List<String> tags) {
+        return new VideoSearchItem(
+            video.getId(),
+            video.getTitle(),
+            video.getCategoryId(),
+            tags,
+            video.getThumbnailUrl(),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getLikeCount(),
+            video.getLanguage(),
+            video.getSource().name().toLowerCase(),
+            video.getCreatedAt()
+        );
+    }
+
+    private VideoCatalogItem toCatalogItem(Video video, List<String> tags) {
+        return new VideoCatalogItem(
+            video.getId(),
+            video.getTitle(),
+            video.getCategoryId(),
+            tags,
+            video.getThumbnailUrl(),
+            video.getSource().name().toLowerCase(),
+            video.getYoutubeId(),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getLikeCount(),
+            video.getDislikeCount(),
+            video.getLanguage(),
+            video.getCreatedAt()
         );
     }
 
