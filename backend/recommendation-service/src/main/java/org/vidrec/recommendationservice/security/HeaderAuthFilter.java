@@ -1,4 +1,4 @@
-package org.vidrec.videoservice.security;
+package org.vidrec.recommendationservice.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,8 +17,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class HeaderAuthFilter extends OncePerRequestFilter {
 
-    private static final String HEADER_USER_ID = "X-User-Id";
-    private static final String HEADER_USER_ROLE = "X-User-Role";
+    private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String USER_ROLE_HEADER = "X-User-Role";
     private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
 
     @Value("${INTERNAL_SERVICE_TOKEN}")
@@ -56,10 +56,20 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    private boolean isPublicRoute(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+
+        String path = request.getRequestURI();
+        return path.matches("^/recommendations/cold/[^/]+$")
+            || path.matches("^/recommendations/similar/[^/]+$");
+    }
+
     private AuthContext extractAuthContext(HttpServletRequest request) {
-        String userIdHeader = request.getHeader(HEADER_USER_ID);
+        String userIdHeader = request.getHeader(USER_ID_HEADER);
         if (StringUtils.hasText(userIdHeader)) {
-            String roleHeader = request.getHeader(HEADER_USER_ROLE);
+            String roleHeader = request.getHeader(USER_ROLE_HEADER);
             UserRole role = UserRole.USER;
             if (StringUtils.hasText(roleHeader)) {
                 try {
@@ -72,18 +82,6 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         }
 
         return null;
-    }
-
-    private boolean isPublicRoute(HttpServletRequest request) {
-        if (!"GET".equalsIgnoreCase(request.getMethod())) {
-            return false;
-        }
-
-        String path = request.getRequestURI();
-        return "/videos/catalog".equals(path)
-            || "/videos/search".equals(path)
-            || path.matches("^/videos/[^/]+$")
-            || path.matches("^/videos/user/[^/]+$");
     }
 
     private boolean isTrustedGatewayRequest(HttpServletRequest request) {
