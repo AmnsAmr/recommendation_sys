@@ -1,124 +1,158 @@
 "use client";
 
-import { AdminGuard } from "@/lib/auth";
+import { useMemo, useState } from "react";
+import { AdminShell } from "@/components/admin-shell";
+import { users as seedUsers } from "@/lib/mock-data";
 
-const users = [
-  { username: "alice_dev", email: "alice@ex.com", role: "USER", status: "Active", joined: "Nov 1" },
-  { username: "bob123", email: "bob@ex.com", role: "USER", status: "Banned", joined: "Oct 28" },
-  { username: "superadmin", email: "admin@ex.com", role: "ADMIN", status: "Active", joined: "Oct 1" },
-  { username: "carol_s", email: "carol@ex.com", role: "USER", status: "Active", joined: "Nov 3" },
-];
+type AdminUser = (typeof seedUsers)[number];
 
 export default function UserManagementPage() {
-  return (
-    <AdminGuard>
-      <UserManagementContent />
-    </AdminGuard>
+  const [users, setUsers] = useState<AdminUser[]>(seedUsers);
+  const [selectedUsername, setSelectedUsername] = useState("bob123");
+  const [query, setQuery] = useState("");
+  const [role, setRole] = useState("All roles");
+  const [notice, setNotice] = useState("");
+
+  const filteredUsers = useMemo(
+    () =>
+      users.filter((user) => {
+        const matchesQuery = `${user.username} ${user.email}`.toLowerCase().includes(query.toLowerCase());
+        const matchesRole = role === "All roles" || user.role === role;
+        return matchesQuery && matchesRole;
+      }),
+    [query, role, users],
   );
-}
 
-function UserManagementContent() {
+  const selectedUser = users.find((user) => user.username === selectedUsername) || users[0];
+
+  const updateSelectedUser = (changes: Partial<AdminUser>, message: string) => {
+    setUsers((current) =>
+      current.map((user) => (user.username === selectedUser.username ? { ...user, ...changes } : user)),
+    );
+    setNotice(message);
+  };
+
+  const deleteSelectedUser = () => {
+    setUsers((current) => current.filter((user) => user.username !== selectedUser.username));
+    setSelectedUsername(users.find((user) => user.username !== selectedUser.username)?.username || "");
+    setNotice(`${selectedUser.username} deleted locally.`);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.32em] text-sky-400">VideoRec — Admin</p>
-            <h1 className="mt-3 text-3xl font-semibold">Users</h1>
-          </div>
-          <button className="rounded-full bg-slate-800 px-5 py-2 text-sm text-slate-100 transition hover:bg-slate-700">Back to site</button>
-        </div>
-
-        <div className="grid gap-8 xl:grid-cols-[1.3fr_0.7fr]">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-1 items-center gap-3 rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3">
-                <input
-                  className="w-full bg-transparent text-slate-100 outline-none placeholder:text-slate-500"
-                  placeholder="Search email or username"
-                />
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <select className="rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none">
-                  <option>All roles</option>
-                  <option>USER</option>
-                  <option>ADMIN</option>
-                </select>
-                <select className="rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none">
-                  <option>All status</option>
-                  <option>Active</option>
-                  <option>Banned</option>
-                </select>
-              </div>
+    <AdminShell title="User management">
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">Users</h2>
+              <p className="mt-1 text-sm text-slate-500">Search, audit, and manage platform access.</p>
             </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="field h-10 px-3 text-sm"
+                placeholder="Search user"
+              />
+              <select value={role} onChange={(event) => setRole(event.target.value)} className="field h-10 w-36 px-3 text-sm">
+                <option>All roles</option>
+                <option>USER</option>
+                <option>ADMIN</option>
+              </select>
+            </div>
+          </div>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-800">
-              <div className="grid grid-cols-[1.4fr_1.4fr_0.8fr_0.8fr_0.8fr] bg-slate-900 px-5 py-3 text-xs uppercase tracking-[0.24em] text-slate-500">
-                <span>Username</span>
-                <span>Email</span>
-                <span>Role</span>
-                <span>Status</span>
-                <span>Joined</span>
-              </div>
-              <div className="divide-y divide-slate-800 bg-slate-950">
-                {users.map((user) => (
-                  <div key={user.username} className="grid grid-cols-[1.4fr_1.4fr_0.8fr_0.8fr_0.8fr] items-center gap-3 px-5 py-4 text-sm text-slate-200">
-                    <span>{user.username}</span>
-                    <span>{user.email}</span>
-                    <span className="rounded-full bg-slate-800 px-3 py-1 text-xs uppercase text-slate-300">{user.role}</span>
-                    <span className={`rounded-full px-3 py-1 text-xs ${user.status === "Active" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>
-                      {user.status}
-                    </span>
-                    <span>{user.joined}</span>
-                  </div>
+          {notice ? (
+            <div className="reaction-burst mt-4 rounded-lg bg-teal-50 px-3 py-2 text-sm font-bold text-teal-800">
+              {notice}
+            </div>
+          ) : null}
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.16em] text-slate-500">
+                <tr>
+                  <th className="py-3 font-bold">Username</th>
+                  <th className="py-3 font-bold">Email</th>
+                  <th className="py-3 font-bold">Role</th>
+                  <th className="py-3 font-bold">Status</th>
+                  <th className="py-3 font-bold">Joined</th>
+                  <th className="py-3 font-bold">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.map((user) => (
+                  <tr key={user.username} className={selectedUser?.username === user.username ? "bg-teal-50/50" : ""}>
+                    <td className="py-4 font-bold text-slate-950">{user.username}</td>
+                    <td className="py-4 text-slate-600">{user.email}</td>
+                    <td className="py-4">
+                      <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{user.role}</span>
+                    </td>
+                    <td className="py-4">
+                      <span className={`rounded-lg px-2 py-1 text-xs font-bold ${user.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="py-4 text-slate-500">{user.joined}</td>
+                    <td className="py-4">
+                      <button
+                        onClick={() => {
+                          setSelectedUsername(user.username);
+                          setNotice(`Reviewing ${user.username}.`);
+                        }}
+                        className="pressable rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        Review
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
+        </section>
 
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <div className="mb-4 border-b border-slate-800 pb-4">
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">User detail — bob123</p>
+        {selectedUser ? (
+          <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:h-fit">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Selected user</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">{selectedUser.username}</h2>
+            <dl className="mt-5 space-y-3 text-sm">
+              {[
+                ["Email", selectedUser.email],
+                ["Role", selectedUser.role],
+                ["Status", selectedUser.status],
+                ["Reason", selectedUser.status === "Banned" ? "Spam behavior" : "No active restriction"],
+                ["Interests", "technology, gaming"],
+              ].map(([label, value]) => (
+                <div key={label} className="grid grid-cols-[100px_1fr] gap-3">
+                  <dt className="text-slate-500">{label}</dt>
+                  <dd className="font-semibold text-slate-800">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-6 grid gap-2">
+              <button
+                onClick={() => updateSelectedUser({ status: selectedUser.status === "Banned" ? "Active" : "Banned" }, `${selectedUser.username} status updated.`)}
+                className="pressable rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+              >
+                {selectedUser.status === "Banned" ? "Unban user" : "Ban user"}
+              </button>
+              <button
+                onClick={() => updateSelectedUser({ role: selectedUser.role === "ADMIN" ? "USER" : "ADMIN" }, `${selectedUser.username} role updated.`)}
+                className="pressable rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                {selectedUser.role === "ADMIN" ? "Demote to user" : "Promote to admin"}
+              </button>
+              <button
+                onClick={deleteSelectedUser}
+                className="pressable rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700"
+              >
+                Delete account
+              </button>
             </div>
-            <div className="space-y-3 text-sm text-slate-300">
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">User ID</span>
-                <span>a1b2c3d4...</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Email</span>
-                <span>bob@example.com</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Role</span>
-                <span>USER</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Status</span>
-                <span className="text-rose-300">Banned</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Ban reason</span>
-                <span>Spam behavior in comments</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Interests</span>
-                <span>technology, gaming</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <span className="text-slate-500">Joined</span>
-                <span>Oct 28, 2024</span>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button className="rounded-full bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Unban user</button>
-              <button className="rounded-full bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/20">Promote to admin</button>
-              <button className="rounded-full bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20">Delete account</button>
-            </div>
-          </div>
-        </div>
+          </aside>
+        ) : null}
       </div>
-    </div>
+    </AdminShell>
   );
 }

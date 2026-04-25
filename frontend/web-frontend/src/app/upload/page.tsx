@@ -1,62 +1,81 @@
+import { AppShell } from "@/components/app-shell";
+
 export default function UploadPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
-          <h1 className="text-3xl font-semibold">Upload a video</h1>
-          <p className="mt-2 text-sm text-slate-400">MP4, WebM or MOV · max 500 MB</p>
+    <AppShell title="Upload studio" eyebrow="Creator tools">
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-black text-slate-950">Video details</h2>
+          <p className="mt-1 text-sm text-slate-500">Prepare metadata before the backend upload endpoint is connected.</p>
 
-          <div className="mt-8 space-y-6">
-            <label className="block rounded-3xl border border-dashed border-slate-700 bg-slate-950 p-10 text-center text-sm text-slate-300">
-              <span className="mb-3 block text-base font-semibold text-slate-100">Drop your video file here</span>
-              <button className="mt-3 inline-flex rounded-full bg-slate-800 px-6 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700">
-                Browse file
-              </button>
-            </label>
+          <label className="mt-6 block rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <span className="block text-lg font-black text-slate-950">Drop video file here</span>
+            <span className="mt-2 block text-sm text-slate-500">MP4, WebM, or MOV up to 500 MB</span>
+            <span className="mt-5 inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white">Browse file</span>
+            <input type="file" accept="video/*" className="sr-only" />
+          </label>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-sm text-slate-400">Title</span>
-                <input
-                  type="text"
-                  placeholder="Give your video a title"
-                  className="mt-2 w-full rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-slate-400">Category</span>
-                <select className="mt-2 w-full rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25">
-                  <option>Technology</option>
-                  <option>Science</option>
-                  <option>Education</option>
-                </select>
-              </label>
-            </div>
-
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm text-slate-400">Tags (comma separated)</span>
-              <input
-                type="text"
-                placeholder="kafka, backend, tutorial"
-                className="mt-2 w-full rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25"
-              />
+              <span className="text-sm font-semibold text-slate-700">Title</span>
+              <input className="field mt-2 h-12 px-4" placeholder="Give your video a clear title" />
             </label>
-
             <label className="block">
-              <span className="text-sm text-slate-400">Language</span>
-              <select className="mt-2 w-full rounded-3xl border border-slate-800 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/25">
+              <span className="text-sm font-semibold text-slate-700">Category</span>
+              <select className="field mt-2 h-12 px-4">
+                <option>Backend</option>
+                <option>AI</option>
+                <option>Data</option>
+                <option>DevOps</option>
+                <option>Design</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="mt-4 block">
+            <span className="text-sm font-semibold text-slate-700">Description</span>
+            <textarea className="field mt-2 min-h-32 px-4 py-3" placeholder="Explain what viewers will learn" />
+          </label>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-700">Tags</span>
+              <input className="field mt-2 h-12 px-4" placeholder="spring, api, tutorial" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-700">Language</span>
+              <select className="field mt-2 h-12 px-4">
                 <option>English</option>
                 <option>French</option>
+                <option>Arabic</option>
                 <option>Spanish</option>
               </select>
             </label>
-
-            <button className="w-full rounded-3xl bg-slate-100 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200">
-              Upload video
-            </button>
           </div>
-        </div>
+
+          <button className="mt-6 h-12 w-full rounded-lg bg-teal-700 px-5 text-sm font-bold text-white hover:bg-teal-800">
+            Submit for processing
+          </button>
+        </section>
+
+        <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm lg:h-fit">
+          <h2 className="text-lg font-black text-slate-950">Publishing checklist</h2>
+          <div className="mt-4 space-y-3">
+            {[
+              "Readable title",
+              "Clear topic category",
+              "Useful description",
+              "Language selected",
+              "Safe for moderation",
+            ].map((item) => (
+              <div key={item} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                <span className="font-semibold text-slate-700">{item}</span>
+                <span className="rounded bg-white px-2 py-1 text-xs font-bold text-slate-500">Ready</span>
+              </div>
+            ))}
+          </div>
+        </aside>
       </div>
-    </div>
+    </AppShell>
   );
 }

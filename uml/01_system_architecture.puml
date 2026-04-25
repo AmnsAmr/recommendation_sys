@@ -1,4 +1,4 @@
-for @startuml System Architecture
+@startuml System_Architecture
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
@@ -22,8 +22,12 @@ package "Backend -- Spring Boot Microservices" {
   [Recommendation Service\nport 8083] as recSvc
 }
 
-package "Event Bus" {
-  queue "Kafka\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded\nuser.events" as kafka
+package "ML Sidecar" {
+  [SVD Sidecar\nFastAPI\nport 8000] as svdSidecar
+}
+
+package "Kafka / Aiven" {
+  queue "Kafka Topics\nvideo.watched\nvideo.liked\nuser.searched\nvideo.uploaded\nuser.events" as kafka
 }
 
 package "Storage" {
@@ -62,6 +66,7 @@ videoSvc --> s3 : upload/stream
 videoSvc --> ytApi : fetch catalog
 recSvc --> recDb
 recSvc --> redis : cache results
+recSvc --> svdSidecar : SVD train/predict\nHTTP internal
 
 videoSvc --> kafka : publishes events
 userSvc --> kafka : publishes events
