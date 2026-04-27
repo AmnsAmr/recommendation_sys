@@ -14,21 +14,26 @@ It also owns moderation for platform-uploaded videos and exposes admin video das
 
 ## Current Implementation State
 
-- [ ] Project scaffold
-- [ ] Video entity + repository + schema
-- [ ] POST /videos/init -- create pending video record
-- [ ] PUT /videos/{id}/upload -- upload to R2, update status READY
-- [ ] GET /videos/{id}
-- [ ] GET /videos/user/{userId}
-- [ ] GET /videos/search
-- [ ] GET /videos/catalog (supports language filter)
-- [ ] POST /videos/watch -- insert watch_session + publish video.watched
-- [ ] POST /videos/{id}/like -- update counts + publish video.liked
-- [ ] POST /videos/search/click -- publish user.searched
-- [ ] YouTube sync -- publish video.uploaded per video
-- [ ] Admin moderation queue / approve / reject / edit / delete video
-- [ ] Admin dashboard metrics for upload volume and moderation backlog
-- [ ] Transactional outbox for Kafka publishes
+- [x] Project scaffold (`pom.xml`, `application.properties`, `VideoServiceApplication`)
+- [x] Video entity + repository + schema (`video/Video.java`, `video/VideoRepository.java`, schema=video_schema)
+- [x] POST /videos/init -- `VideoController` + `VideoService.initUpload()`
+- [x] PUT /videos/{id}/upload -- `VideoService.uploadFile()` (status -> UNDER_REVIEW for own uploads)
+- [x] GET /videos/{id} (READY-only filter)
+- [x] GET /videos/user/{userId} (paginated, READY-only)
+- [x] GET /videos/search (`VideoRepository.search`)
+- [x] GET /videos/catalog (with language filter, `VideoRepository.findCatalog`)
+- [x] POST /videos/watch -- `WatchService.recordWatch()` inserts watch_session + publishes video.watched
+- [x] POST /videos/{id}/like -- `LikeService.recordLike()` atomic counter updates + publishes video.liked
+- [x] POST /videos/search/click -- `SearchService.recordClick()` publishes user.searched
+- [ ] YouTube sync -- **not implemented** (no `youtube/` package yet; `VideoSource.YOUTUBE` enum exists)
+- [x] Admin moderation queue / approve / reject / delete (`AdminVideoController` + `AdminVideoService`)
+- [x] Admin dashboard metrics (`AdminVideoService.getDashboard()`)
+- [x] Transactional outbox (`outbox/OutboxEvent` + `OutboxPublisher`, 1s `@Scheduled` drain)
+- [x] Spring Security + header-based auth (`security/SecurityConfig`, `HeaderAuthFilter`, `JwtUtil`)
+- [x] Kafka SSL/SASL config (`application.properties` + `KafkaConfig`)
+- [x] R2 storage (`storage/R2StorageService`)
+
+> Note: actual package layout differs slightly from the target below -- `like/` is its own feature package (not under `video/`), and `shared/exception/` exists for `GlobalExceptionHandler` + `ApiException`.
 
 ---
 
@@ -110,6 +115,7 @@ org.vidrec.videoservice
 
 ## Known Issues / TODOs
 
-- No video deletion endpoint
-- YouTube sync does not handle quota errors gracefully
-- No duration extraction from uploaded files
+- YouTube sync feature is not implemented (no `youtube/` package). Schema and `kafka/events/VideoUploadedEvent` already exist; needs `YouTubeService`, `YouTubeSyncRunner`, quota-aware retry, and a sync-state row.
+- Uploaded videos do not have duration extracted; `Video.duration` is left null for OWN sources. Frontend currently has no enforced restriction to MP4/MOV either.
+- `AdminVideoService.deleteVideo()` does not clean up `watch_sessions` rows, which still reference the deleted video.
+- `R2StorageService` has no `delete` method, so admin-deleted videos leave their R2 object orphaned.

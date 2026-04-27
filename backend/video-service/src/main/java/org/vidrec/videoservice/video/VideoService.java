@@ -1,6 +1,9 @@
 package org.vidrec.videoservice.video;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -25,7 +28,7 @@ public class VideoService {
 
     private static final int TOKEN_EXPIRY_MINUTES = 15;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-        "video/mp4", "video/webm", "video/quicktime"
+        "video/mp4", "video/quicktime"
     );
     private static final long MAX_FILE_SIZE = 500L * 1024 * 1024;
 
@@ -34,6 +37,7 @@ public class VideoService {
     private final UploadTokenRepository uploadTokenRepository;
     private final CategoryRepository categoryRepository;
     private final R2StorageService r2StorageService;
+    private final VideoDurationProbe videoDurationProbe;
 
     @Transactional
     public VideoUploadInitResponse initUpload(UUID uploaderId, VideoUploadInitRequest request) {
@@ -129,12 +133,27 @@ public class VideoService {
         String extension = extractExtension(file.getContentType());
         String s3Key = "videos/" + videoId + "." + extension;
 
+        Path temp = null;
+        Integer durationSeconds = null;
         try {
-            r2StorageService.upload(s3Key, file.getInputStream(), file.getSize(), file.getContentType());
+            temp = Files.createTempFile("upload-" + videoId + "-", "." + extension);
+            file.transferTo(temp);
+            durationSeconds = videoDurationProbe.probeSeconds(temp);
+            try (InputStream in = Files.newInputStream(temp)) {
+                r2StorageService.upload(s3Key, in, file.getSize(), file.getContentType());
+            }
         } catch (IOException ex) {
             log.error("Failed to read upload stream for video={}", videoId, ex);
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "Failed to process uploaded file.", List.of());
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ex) {
+                    log.warn("Failed to delete temp upload file {}: {}", temp, ex.getMessage());
+                }
+            }
         }
 
         token.setUsed(true);
@@ -145,6 +164,7 @@ public class VideoService {
 
         video.setS3Key(s3Key);
         video.setThumbnailUrl(thumbnailUrl);
+        video.setDuration(durationSeconds);
         video.setStatus(VideoStatus.UNDER_REVIEW);
         videoRepository.save(video);
 
@@ -314,7 +334,7 @@ public class VideoService {
         }
         if (!ALLOWED_CONTENT_TYPES.contains(file.getContentType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_FILE_TYPE",
-                "Allowed types: video/mp4, video/webm, video/quicktime.", List.of());
+                "Allowed types: video/mp4, video/quicktime.", List.of());
         }
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FILE_TOO_LARGE",
@@ -325,7 +345,6 @@ public class VideoService {
     private String extractExtension(String contentType) {
         return switch (contentType) {
             case "video/mp4" -> "mp4";
-            case "video/webm" -> "webm";
             case "video/quicktime" -> "mov";
             default -> "mp4";
         };

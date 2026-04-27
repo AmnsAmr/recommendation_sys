@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -16,14 +17,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.vidrec.videoservice.outbox.OutboxEvent;
 import org.vidrec.videoservice.outbox.OutboxEventRepository;
+import org.vidrec.videoservice.storage.R2StorageService;
 import org.vidrec.videoservice.video.Video;
 import org.vidrec.videoservice.video.VideoRepository;
 import org.vidrec.videoservice.video.VideoSource;
 import org.vidrec.videoservice.video.VideoStatus;
 import org.vidrec.videoservice.video.VideoTagRepository;
+import org.vidrec.videoservice.watch.WatchSessionRepository;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminVideoService {
@@ -34,6 +38,8 @@ public class AdminVideoService {
     private final VideoRepository videoRepository;
     private final VideoTagRepository videoTagRepository;
     private final OutboxEventRepository outboxEventRepository;
+    private final WatchSessionRepository watchSessionRepository;
+    private final R2StorageService r2StorageService;
     private final ObjectMapper objectMapper;
 
     public AdminVideoDashboardResponse getDashboard() {
@@ -135,8 +141,17 @@ public class AdminVideoService {
     public void deleteVideo(String videoId) {
         Video video = getRequiredOwnVideo(videoId);
         videoTagRepository.deleteAll(videoTagRepository.findByIdVideoId(videoId));
+        watchSessionRepository.deleteByVideoId(videoId);
         outboxEventRepository.deleteByAggregateId(videoId);
+        String s3Key = video.getS3Key();
         videoRepository.delete(video);
+        if (s3Key != null) {
+            try {
+                r2StorageService.delete(s3Key);
+            } catch (Exception ex) {
+                log.warn("R2 delete failed for s3Key={} (video {}): {}", s3Key, videoId, ex.getMessage());
+            }
+        }
     }
 
     private Video getRequiredVideo(String videoId) {
