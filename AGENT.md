@@ -213,7 +213,8 @@ SVD_SIDECAR_URL=http://svd-sidecar:8000
 | PUT | `/users/{id}/profile` | JWT | Update profile fields |
 | GET | `/admin/users/dashboard` | Admin JWT | User/admin dashboard metrics |
 | GET | `/admin/users` | Admin JWT | List users for moderation |
-| PUT | `/admin/users/{id}/ban` | Admin JWT | Ban a user |
+| PUT | `/admin/users/{id}/ban` | Admin JWT | Ban a user (emits user.events type=banned) |
+| PUT | `/admin/users/{id}/unban` | Admin JWT | Reinstate a banned user (emits user.events type=reinstated) |
 | DELETE | `/admin/users/{id}` | Admin JWT | Delete a user |
 
 ### Video Service (via gateway: /videos/**)

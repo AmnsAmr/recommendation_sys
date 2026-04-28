@@ -97,6 +97,7 @@ For consolidated user lifecycle messages on `user.events`, `eventType` must be o
 - `deactivated`
 - `prefs_updated`
 - `banned`
+- `reinstated`
 - `deleted`
 
 ### 3.3 Idempotency

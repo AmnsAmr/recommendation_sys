@@ -109,10 +109,17 @@ public class AdminUserService {
     @Transactional
     public AdminUserDetailResponse unbanUser(UUID userId) {
         User user = getRequiredUser(userId);
+        if (user.getBannedAt() == null) {
+            throw badRequest("USER_NOT_BANNED", "User is not currently banned.");
+        }
+
         user.setActive(true);
         user.setBannedAt(null);
         user.setBanReason(null);
-        return toDetail(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+
+        publishLifecycleEvent(savedUser.getId(), "reinstated", null);
+        return toDetail(savedUser);
     }
 
     @Transactional
