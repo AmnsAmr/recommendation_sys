@@ -6,6 +6,9 @@ import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
 import { saveHistory } from "@/lib/history";
 import { comments, videos } from "@/lib/mock-data";
+import { getSimilarVideos } from "@/lib/recommendations-api";
+import { getVideo } from "@/lib/videos-api";
+import { mapApiVideoToUiVideo } from "@/lib/video-types";
 
 function subscribeToUrlChange(onChange: () => void) {
   window.addEventListener("popstate", onChange);
@@ -26,7 +29,12 @@ function readSearch() {
 }
 
 function parseDuration(duration: string) {
-  const [minutes, seconds] = duration.split(":").map(Number);
+  const parts = duration.split(":").map(Number);
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts;
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+  const [minutes, seconds] = parts;
   return minutes * 60 + seconds;
 }
 
@@ -36,17 +44,63 @@ function formatTime(value: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+type WatchVideo = {
+  id?: string;
+  title: string;
+  creator: string;
+  channel: string;
+  views: string;
+  uploadedAt: string;
+  duration: string;
+  category: string;
+  score: string;
+  poster?: string;
+  description: string;
+  likeCount?: number;
+  dislikeCount?: number;
+};
+
 export default function WatchPage() {
   const search = useSyncExternalStore(subscribeToUrlChange, readSearch, () => "");
-  const currentVideo = useMemo(() => {
-    const title = new URLSearchParams(search).get("video");
+  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const videoId = params.get("videoId");
+  const fallbackVideo = useMemo(() => {
+    const title = params.get("video");
     return videos.find((video) => video.title === title) || videos[0];
-  }, [search]);
+  }, [params]);
+  const [currentVideo, setCurrentVideo] = useState<WatchVideo>(fallbackVideo);
 
-  return <WatchExperience key={currentVideo.title} currentVideo={currentVideo} />;
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!videoId) {
+      setCurrentVideo(fallbackVideo);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getVideo(videoId)
+      .then((video) => {
+        if (!cancelled) {
+          setCurrentVideo(mapApiVideoToUiVideo(video));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentVideo(fallbackVideo);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackVideo, videoId]);
+
+  return <WatchExperience key={currentVideo.id || currentVideo.title} currentVideo={currentVideo} />;
 }
 
-function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[number] }) {
+function WatchExperience({ currentVideo }: { currentVideo: WatchVideo }) {
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -56,8 +110,49 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
   const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [upNextVideos, setUpNextVideos] = useState<WatchVideo[]>([]);
+  const [usingRecommendationFallback, setUsingRecommendationFallback] = useState(true);
   const durationSeconds = parseDuration(currentVideo.duration);
   const progressPct = Math.min((progress / durationSeconds) * 100, 100);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fallback = videos.filter((video) => video.title !== currentVideo.title).slice(0, 7);
+
+    if (!currentVideo.id) {
+      setUpNextVideos(fallback);
+      setUsingRecommendationFallback(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadSimilarVideos() {
+      try {
+        const response = await getSimilarVideos(currentVideo.id!, 7);
+        const apiVideos = await Promise.all(response.similarVideoIds.map((id) => getVideo(id)));
+
+        if (cancelled) {
+          return;
+        }
+
+        const mappedVideos = apiVideos.map(mapApiVideoToUiVideo);
+        setUpNextVideos(mappedVideos.length > 0 ? mappedVideos : fallback);
+        setUsingRecommendationFallback(mappedVideos.length === 0);
+      } catch {
+        if (!cancelled) {
+          setUpNextVideos(fallback);
+          setUsingRecommendationFallback(true);
+        }
+      }
+    }
+
+    loadSimilarVideos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentVideo.id, currentVideo.title]);
 
   useEffect(() => {
     if (!playing) {
@@ -153,7 +248,7 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
                     liked ? "bg-emerald-600 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  <span aria-hidden="true">▲</span> Like {342 + (liked ? 1 : 0)}
+                  <span aria-hidden="true">▲</span> Like {(currentVideo.likeCount ?? 342) + (liked ? 1 : 0)}
                 </button>
                 <button
                   onClick={() => {
@@ -279,9 +374,14 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
 
         <aside className="lg:sticky lg:top-24 lg:h-fit">
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-black text-slate-950">Up next</h2>
+            <div>
+              <h2 className="text-lg font-black text-slate-950">Up next</h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                {usingRecommendationFallback ? "Demo queue" : "Similar videos from recommendations"}
+              </p>
+            </div>
             <div className="mt-4 grid gap-3">
-              {videos.filter((video) => video.title !== currentVideo.title).slice(0, 7).map((video) => (
+              {upNextVideos.map((video) => (
                 <VideoCard key={video.title} video={video} compact />
               ))}
             </div>

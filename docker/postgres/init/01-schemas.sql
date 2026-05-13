@@ -1,0 +1,3 @@
+CREATE SCHEMA IF NOT EXISTS user_schema;
+CREATE SCHEMA IF NOT EXISTS video_schema;
+CREATE SCHEMA IF NOT EXISTS recommendation_schema;

@@ -47,6 +47,7 @@ public class WatchSession {
     private Double completionPct;
 
     @Column(name = "rewatch_count", nullable = false)
+    @Builder.Default
     private Integer rewatchCount = 0;
 
     @Enumerated(EnumType.STRING)

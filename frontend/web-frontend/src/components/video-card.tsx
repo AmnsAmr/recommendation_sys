@@ -2,6 +2,7 @@ import Link from "next/link";
 import { VideoPoster } from "@/components/video-poster";
 
 type Video = {
+  id?: string;
   title: string;
   creator: string;
   channel: string;
@@ -14,14 +15,17 @@ type Video = {
   description: string;
 };
 
-function videoHref(title: string) {
-  return `/watch?video=${encodeURIComponent(title)}`;
+function videoHref(video: Video) {
+  if (video.id) {
+    return `/watch?videoId=${encodeURIComponent(video.id)}`;
+  }
+  return `/watch?video=${encodeURIComponent(video.title)}`;
 }
 
 export function VideoCard({ video, compact = false }: { video: Video; compact?: boolean }) {
   if (compact) {
     return (
-      <Link href={videoHref(video.title)} className="group grid grid-cols-[150px_1fr] gap-3 rounded-xl p-1 transition hover:bg-slate-100 active:scale-[0.99]">
+      <Link href={videoHref(video)} className="group grid grid-cols-[150px_1fr] gap-3 rounded-xl p-1 transition hover:bg-slate-100 active:scale-[0.99]">
         <VideoPoster kind={video.poster} duration={video.duration} className="aspect-video rounded-xl" />
         <div className="min-w-0 py-1">
           <h3 className="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
@@ -37,7 +41,7 @@ export function VideoCard({ video, compact = false }: { video: Video; compact?: 
   }
 
   return (
-    <Link href={videoHref(video.title)} className="group block rounded-xl bg-transparent transition hover:-translate-y-1">
+    <Link href={videoHref(video)} className="group block rounded-xl bg-transparent transition hover:-translate-y-1">
       <VideoPoster kind={video.poster} duration={video.duration} label={video.category} className="aspect-video rounded-xl" />
       <div className="mt-3 flex gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-950 text-sm font-bold text-white transition group-hover:bg-teal-700">

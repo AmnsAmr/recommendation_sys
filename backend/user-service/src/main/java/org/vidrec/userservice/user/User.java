@@ -45,6 +45,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private UserRole role = UserRole.USER;
 
     @Column
@@ -54,6 +55,7 @@ public class User {
     private String profilePictureUrl;
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private boolean isActive = true;
 
     @Column(name = "banned_at")

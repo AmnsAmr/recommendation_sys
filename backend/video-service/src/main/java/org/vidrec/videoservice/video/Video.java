@@ -58,12 +58,15 @@ public class Video {
     private String thumbnailUrl;
 
     @Column(name = "view_count", nullable = false)
+    @Builder.Default
     private Long viewCount = 0L;
 
     @Column(name = "like_count", nullable = false)
+    @Builder.Default
     private Long likeCount = 0L;
 
     @Column(name = "dislike_count", nullable = false)
+    @Builder.Default
     private Long dislikeCount = 0L;
 
     @Column

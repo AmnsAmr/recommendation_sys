@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -22,6 +23,40 @@ import org.springframework.web.multipart.MultipartFile;
 public class VideoController {
 
     private final VideoService videoService;
+
+    @GetMapping("/{videoId}")
+    public ResponseEntity<VideoResponse> getVideo(@PathVariable String videoId) {
+        return ResponseEntity.ok(videoService.getVideo(videoId));
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<VideoListResponse> getVideosByUser(
+        @PathVariable UUID userId,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(videoService.getVideosByUser(userId, page, size));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<VideoListResponse> searchVideos(
+        @RequestParam("q") String query,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(videoService.searchVideos(query, page, size));
+    }
+
+    @GetMapping("/catalog")
+    public ResponseEntity<VideoListResponse> getCatalog(
+        @RequestParam(required = false) String categoryId,
+        @RequestParam(required = false) String source,
+        @RequestParam(required = false) String language,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(videoService.getCatalog(categoryId, source, language, page, size));
+    }
 
     @PostMapping("/init")
     public ResponseEntity<VideoUploadInitResponse> initUpload(

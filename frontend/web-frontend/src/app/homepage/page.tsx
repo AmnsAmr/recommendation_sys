@@ -1,13 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { categories, videos } from "@/lib/mock-data";
+import { getVideoCatalog } from "@/lib/videos-api";
+import { mapApiVideoToUiVideo, type UiVideo } from "@/lib/video-types";
+
+type DisplayVideo = UiVideo | (typeof videos)[number];
 
 export default function HomepagePage() {
   const [active, setActive] = useState("For you");
-  const visibleVideos = active === "For you" ? videos : videos.filter((video) => video.category === active);
+  const [visibleVideos, setVisibleVideos] = useState<DisplayVideo[]>([]);
+  const [usingFallback, setUsingFallback] = useState(false);
+
+  const fallbackVideos = useMemo(
+    () => (active === "For you" ? videos : videos.filter((video) => video.category === active)),
+    [active],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVideos() {
+      try {
+        const response = await getVideoCatalog({
+          categoryId: active === "For you" ? undefined : active.toLowerCase(),
+          page: 0,
+          size: 24,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setVisibleVideos(response.videos.map(mapApiVideoToUiVideo));
+        setUsingFallback(false);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setVisibleVideos(fallbackVideos);
+        setUsingFallback(true);
+      }
+    }
+
+    loadVideos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, fallbackVideos]);
 
   return (
     <AppShell>
@@ -33,7 +77,11 @@ export default function HomepagePage() {
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-black text-slate-950">{active === "For you" ? "Recommended" : active}</h1>
-            <p className="mt-1 text-sm text-slate-500">Watch videos with large thumbnails, just like a video platform.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {usingFallback
+                ? "Showing demo videos while the video API is unavailable."
+                : "Live videos loaded from the video service."}
+            </p>
           </div>
         </div>
 

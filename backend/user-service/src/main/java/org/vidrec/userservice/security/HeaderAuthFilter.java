@@ -46,7 +46,7 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         throws ServletException, IOException {
         AuthContext authContext = extractAuthContext(request);
         if (authContext == null || authContext.userId() == null || authContext.userId().isBlank()) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            filterChain.doFilter(request, response);
             return;
         }
 

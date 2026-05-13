@@ -29,11 +29,11 @@ public class ItemFactor {
     private String videoId;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(columnDefinition = "float[]")
+    @Column
     private Double[] vector;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(columnDefinition = "text[]")
+    @Column
     private String[] tags;
 
     @Column(name = "category_id")
@@ -46,9 +46,11 @@ public class ItemFactor {
     private String language;
 
     @Column(name = "view_count", nullable = false)
+    @Builder.Default
     private Long viewCount = 0L;
 
     @Column(name = "global_score", nullable = false)
+    @Builder.Default
     private Double globalScore = 0.0;
 
     @Column(name = "updated_at", nullable = false)

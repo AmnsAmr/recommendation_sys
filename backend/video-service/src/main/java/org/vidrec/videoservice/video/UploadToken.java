@@ -36,6 +36,7 @@ public class UploadToken {
     private LocalDateTime expiresAt;
 
     @Column(nullable = false)
+    @Builder.Default
     private boolean used = false;
 
     @Column(name = "created_at", nullable = false)

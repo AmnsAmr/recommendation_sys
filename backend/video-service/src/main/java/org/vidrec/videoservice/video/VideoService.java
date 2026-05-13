@@ -8,6 +8,8 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,45 @@ public class VideoService {
     private final UploadTokenRepository uploadTokenRepository;
     private final CategoryRepository categoryRepository;
     private final R2StorageService r2StorageService;
+
+    @Transactional(readOnly = true)
+    public VideoResponse getVideo(String videoId) {
+        Video video = videoRepository.findById(videoId)
+            .filter(found -> found.getStatus() == VideoStatus.READY)
+            .orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, "VIDEO_NOT_FOUND",
+                "No public video with id: " + videoId, List.of()));
+        return toResponse(video);
+    }
+
+    @Transactional(readOnly = true)
+    public VideoListResponse getVideosByUser(UUID userId, int page, int size) {
+        Page<Video> result = videoRepository.findByUploaderIdOrderByCreatedAtDesc(userId, pageRequest(page, size));
+        return toListResponse(result);
+    }
+
+    @Transactional(readOnly = true)
+    public VideoListResponse searchVideos(String query, int page, int size) {
+        if (query == null || query.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Search query is required.", List.of());
+        }
+
+        Page<Video> result = videoRepository.searchByQuery(VideoStatus.READY, query.trim(), pageRequest(page, size));
+        return toListResponse(result);
+    }
+
+    @Transactional(readOnly = true)
+    public VideoListResponse getCatalog(String categoryId, String source, String language, int page, int size) {
+        VideoSource parsedSource = parseSource(source);
+        Page<Video> result = videoRepository.findCatalog(
+            VideoStatus.READY,
+            normalize(categoryId),
+            parsedSource,
+            normalize(language),
+            pageRequest(page, size)
+        );
+        return toListResponse(result);
+    }
 
     @Transactional
     public VideoUploadInitResponse initUpload(UUID uploaderId, VideoUploadInitRequest request) {
@@ -186,5 +227,72 @@ public class VideoService {
             sb.append(chars.charAt(random.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    private PageRequest pageRequest(int page, int size) {
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
+    }
+
+    private VideoSource parseSource(String source) {
+        String normalized = normalize(source);
+        if (normalized == null) {
+            return null;
+        }
+
+        try {
+            return VideoSource.valueOf(normalized.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Invalid source: " + source, List.of());
+        }
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private VideoListResponse toListResponse(Page<Video> result) {
+        return new VideoListResponse(
+            result.getContent().stream().map(this::toResponse).toList(),
+            result.getNumber(),
+            result.getSize(),
+            result.getTotalElements()
+        );
+    }
+
+    private VideoResponse toResponse(Video video) {
+        List<String> tags = videoTagRepository.findByIdVideoId(video.getId()).stream()
+            .map(tag -> tag.getId().getTag())
+            .sorted()
+            .toList();
+
+        return new VideoResponse(
+            video.getId(),
+            video.getTitle(),
+            video.getDescription(),
+            video.getCategoryId(),
+            tags,
+            video.getSource().name().toLowerCase(),
+            video.getYoutubeId(),
+            resolveVideoUrl(video),
+            video.getThumbnailUrl(),
+            video.getDuration() != null ? video.getDuration() : 0,
+            video.getViewCount() != null ? video.getViewCount() : 0L,
+            video.getLikeCount() != null ? video.getLikeCount() : 0L,
+            video.getDislikeCount() != null ? video.getDislikeCount() : 0L,
+            video.getLanguage() != null ? video.getLanguage() : "en",
+            video.getUploaderId(),
+            video.getStatus().name(),
+            video.getCreatedAt()
+        );
+    }
+
+    private String resolveVideoUrl(Video video) {
+        if (video.getSource() == VideoSource.YOUTUBE || video.getS3Key() == null || video.getS3Key().isBlank()) {
+            return null;
+        }
+        return r2StorageService.getPublicUrl(video.getS3Key());
     }
 }
