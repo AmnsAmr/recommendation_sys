@@ -33,25 +33,29 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
+        // Allow public paths to proceed without gateway token validation
+        if (isPublicRoute(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (!isTrustedGatewayRequest(request)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
-        if (!isPublicRoute(request)) {
-            AuthContext authContext = extractAuthContext(request);
-            if (authContext == null || !StringUtils.hasText(authContext.userId())) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
-
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                authContext.userId(),
-                null,
-                List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
-            );
-            SecurityContextHolder.getContext().setAuthentication(auth);
+        AuthContext authContext = extractAuthContext(request);
+        if (authContext == null || !StringUtils.hasText(authContext.userId())) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
+
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+            authContext.userId(),
+            null,
+            List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
 
         filterChain.doFilter(request, response);
     }

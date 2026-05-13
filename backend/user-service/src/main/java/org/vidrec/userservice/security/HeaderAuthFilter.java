@@ -44,25 +44,31 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
+        String path = request.getRequestURI();
+
+        // Allow public paths to proceed without gateway token validation
+        if (PUBLIC_PATHS.contains(path)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (!isTrustedGatewayRequest(request)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
-        if (!PUBLIC_PATHS.contains(request.getRequestURI())) {
-            AuthContext authContext = extractAuthContext(request);
-            if (authContext == null || authContext.userId() == null || authContext.userId().isBlank()) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
-
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                authContext.userId(),
-                null,
-                List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
-            );
-            SecurityContextHolder.getContext().setAuthentication(auth);
+        AuthContext authContext = extractAuthContext(request);
+        if (authContext == null || authContext.userId() == null || authContext.userId().isBlank()) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
+
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+            authContext.userId(),
+            null,
+            List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
 
         filterChain.doFilter(request, response);
     }

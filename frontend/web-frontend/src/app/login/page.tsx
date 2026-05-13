@@ -4,15 +4,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { api, setAuthToken } from "@/lib/api";
+import { emitAuthChange } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (event: React.FormEvent) => {
+  const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!email || !password) {
@@ -20,16 +22,29 @@ export default function LoginPage() {
       return;
     }
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        email,
-        role,
-        username: email.split("@")[0],
-      }),
-    );
+    setLoading(true);
+    setError("");
 
-    router.push(role === "admin" ? "/admin/dashboard" : "/homepage");
+    try {
+      const response = await api.login(email, password);
+      setAuthToken(response.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          userId: response.userId,
+          email,
+          role: response.role,
+          username: response.username,
+          displayName: response.displayName,
+        }),
+      );
+      emitAuthChange();
+      router.push(response.role.toLowerCase() === "admin" ? "/admin/dashboard" : "/homepage");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to sign in.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -69,25 +84,7 @@ export default function LoginPage() {
             <div className="p-6 sm:p-8">
             <div className="mb-6">
               <h2 className="text-3xl font-black text-slate-950">Sign in</h2>
-              <p className="mt-2 text-sm text-slate-500">Use any email and password while the backend is offline.</p>
-            </div>
-
-            <div className="mb-5 grid grid-cols-2 rounded-full bg-slate-100 p-1">
-              {[
-                ["user", "User"],
-                ["admin", "Admin"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setRole(value)}
-                  className={`rounded-full px-4 py-2 text-sm font-black transition ${
-                    role === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+              <p className="mt-2 text-sm text-slate-500">Sign in with your backend account.</p>
             </div>
 
             {error ? (
@@ -119,8 +116,8 @@ export default function LoginPage() {
                 />
               </label>
 
-              <button type="submit" className="h-12 w-full rounded-full bg-gradient-to-r from-teal-700 to-orange-500 px-5 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01]">
-                Continue as {role === "admin" ? "Admin" : "User"}
+              <button disabled={loading} type="submit" className="h-12 w-full rounded-full bg-gradient-to-r from-teal-700 to-orange-500 px-5 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70">
+                {loading ? "Signing in..." : "Continue"}
               </button>
             </form>
 

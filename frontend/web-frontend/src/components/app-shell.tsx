@@ -32,6 +32,7 @@ export function AppShell({
   const router = useRouter();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const initials = user?.username?.slice(0, 2).toUpperCase() || "VR";
 
   useEffect(() => {
@@ -63,17 +64,26 @@ export function AppShell({
             <label className="sr-only" htmlFor="global-search">
               Search videos
             </label>
-            <div className="flex w-full overflow-hidden rounded-full border border-slate-300 bg-white">
+            <form
+              className="flex w-full overflow-hidden rounded-full border border-slate-300 bg-white"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = query.trim();
+                router.push(value ? `/homepage?q=${encodeURIComponent(value)}` : "/homepage");
+              }}
+            >
               <input
                 id="global-search"
                 type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search"
                 className="h-10 min-w-0 flex-1 px-4 text-sm outline-none"
               />
               <button className="border-l border-slate-300 bg-slate-50 px-5 text-sm font-bold text-slate-700 hover:bg-slate-100">
                 Search
               </button>
-            </div>
+            </form>
           </div>
 
           <Link

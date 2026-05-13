@@ -1,13 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
+import { api } from "@/lib/api";
 import { categories, videos } from "@/lib/mock-data";
+import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 export default function HomepagePage() {
+  return (
+    <Suspense fallback={<AppShell><p className="text-sm font-bold text-slate-500">Loading videos...</p></AppShell>}>
+      <HomepageContent />
+    </Suspense>
+  );
+}
+
+function HomepageContent() {
+  const searchParams = useSearchParams();
   const [active, setActive] = useState("For you");
-  const visibleVideos = active === "For you" ? videos : videos.filter((video) => video.category === active);
+  const [remoteVideos, setRemoteVideos] = useState<UiVideo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState("");
+  const query = searchParams.get("q")?.trim() || "";
+
+  useEffect(() => {
+    const genre = searchParams.get("genre");
+    if (genre && categories.includes(genre)) {
+      setActive(genre);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let activeRequest = true;
+    setLoading(true);
+    setNotice("");
+
+    const request = query ? api.searchVideos(query) : api.getCatalog({ categoryId: active === "For you" ? undefined : active });
+
+    request
+      .then((response) => {
+        if (activeRequest) {
+          setRemoteVideos(response.videos.map(fromApiVideo));
+        }
+      })
+      .catch(() => {
+        if (activeRequest) {
+          setRemoteVideos([]);
+          setNotice("Backend unavailable, showing local sample videos.");
+        }
+      })
+      .finally(() => {
+        if (activeRequest) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      activeRequest = false;
+    };
+  }, [active, query]);
+
+  const fallbackVideos = useMemo(
+    () =>
+      (active === "For you" ? videos : videos.filter((video) => video.category === active)).map((video, index) => ({
+        ...video,
+        id: video.title,
+        durationSeconds: 0,
+        source: "own",
+      })),
+    [active],
+  );
+  const visibleVideos = remoteVideos.length > 0 ? remoteVideos : fallbackVideos;
 
   return (
     <AppShell>
@@ -32,8 +96,8 @@ export default function HomepagePage() {
       <section className="mt-5">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-black text-slate-950">{active === "For you" ? "Recommended" : active}</h1>
-            <p className="mt-1 text-sm text-slate-500">Watch videos with large thumbnails, just like a video platform.</p>
+            <h1 className="text-2xl font-black text-slate-950">{query ? `Search: ${query}` : active === "For you" ? "Recommended" : active}</h1>
+            <p className="mt-1 text-sm text-slate-500">{loading ? "Loading from backend..." : notice || "Catalog loaded through the API gateway."}</p>
           </div>
         </div>
 

@@ -1,17 +1,49 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
+import { api } from "@/lib/api";
 import { users as seedUsers } from "@/lib/mock-data";
+import type { AdminUser as ApiAdminUser } from "@/lib/types";
 
-type AdminUser = (typeof seedUsers)[number];
+type AdminUser = {
+  userId: string;
+  username: string;
+  email: string;
+  role: string;
+  status: string;
+  joined: string;
+};
+
+function fromApiUser(user: ApiAdminUser): AdminUser {
+  return {
+    userId: user.userId,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    status: user.isActive ? "Active" : "Banned",
+    joined: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-",
+  };
+}
+
+const fallbackUsers = seedUsers.map((user) => ({ ...user, userId: user.username }));
 
 export default function UserManagementPage() {
-  const [users, setUsers] = useState<AdminUser[]>(seedUsers);
+  const [users, setUsers] = useState<AdminUser[]>(fallbackUsers);
   const [selectedUsername, setSelectedUsername] = useState("bob123");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("All roles");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    api.getAdminUsers()
+      .then((response) => {
+        const mapped = response.users.map(fromApiUser);
+        setUsers(mapped);
+        setSelectedUsername(mapped[0]?.username || "");
+      })
+      .catch(() => setNotice("Admin user API unavailable. Showing local sample users."));
+  }, []);
 
   const filteredUsers = useMemo(
     () =>
@@ -26,6 +58,16 @@ export default function UserManagementPage() {
   const selectedUser = users.find((user) => user.username === selectedUsername) || users[0];
 
   const updateSelectedUser = (changes: Partial<AdminUser>, message: string) => {
+    const request =
+      changes.status && changes.status !== selectedUser.status
+        ? changes.status === "Banned"
+          ? api.banUser(selectedUser.userId, "Admin moderation")
+          : api.unbanUser(selectedUser.userId)
+        : changes.role && changes.role !== selectedUser.role
+          ? api.updateAdminUser(selectedUser.userId, { role: changes.role })
+          : Promise.resolve();
+
+    request.catch(() => setNotice("Backend update failed. Change applied only in the UI."));
     setUsers((current) =>
       current.map((user) => (user.username === selectedUser.username ? { ...user, ...changes } : user)),
     );
@@ -33,6 +75,7 @@ export default function UserManagementPage() {
   };
 
   const deleteSelectedUser = () => {
+    api.deleteUser(selectedUser.userId).catch(() => setNotice("Backend delete failed. User removed only in the UI."));
     setUsers((current) => current.filter((user) => user.username !== selectedUser.username));
     setSelectedUsername(users.find((user) => user.username !== selectedUser.username)?.username || "");
     setNotice(`${selectedUser.username} deleted locally.`);

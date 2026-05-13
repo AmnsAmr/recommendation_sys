@@ -1,15 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
-
-const metrics = [
-  { label: "Users", value: "1,284", detail: "+12 this week" },
-  { label: "Active users", value: "1,261", detail: "98.2% healthy" },
-  { label: "Videos", value: "542", detail: "498 public" },
-  { label: "Pending", value: "4", detail: "Needs review" },
-  { label: "Views", value: "48.2k", detail: "+18% this month" },
-];
+import { api } from "@/lib/api";
 
 const activity = [
   { time: "2 min ago", event: "Spring Boot REST API uploaded", actor: "alice_dev", status: "pending" },
@@ -20,6 +13,28 @@ const activity = [
 
 export default function AdminDashboardPage() {
   const [exported, setExported] = useState(false);
+  const [metrics, setMetrics] = useState([
+    { label: "Users", value: "-", detail: "Loading" },
+    { label: "Active users", value: "-", detail: "Loading" },
+    { label: "Videos", value: "-", detail: "Loading" },
+    { label: "Pending", value: "-", detail: "Loading" },
+    { label: "Views", value: "-", detail: "Loading" },
+  ]);
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    Promise.all([api.getAdminUserDashboard(), api.getAdminVideoDashboard()])
+      .then(([users, videos]) => {
+        setMetrics([
+          { label: "Users", value: String(users.totalUsers), detail: `+${users.newUsersLast7Days} this week` },
+          { label: "Active users", value: String(users.activeUsers), detail: `${users.bannedUsers} banned` },
+          { label: "Videos", value: String(videos.totalVideos), detail: `${videos.publicVideos} public` },
+          { label: "Pending", value: String(videos.pendingReviewVideos), detail: "Needs review" },
+          { label: "Views", value: String(videos.totalViews), detail: `${videos.uploadsLast7Days} uploads this week` },
+        ]);
+      })
+      .catch(() => setNotice("Admin API unavailable. Check backend services and credentials."));
+  }, []);
 
   const exportReport = () => {
     setExported(true);
@@ -37,6 +52,7 @@ export default function AdminDashboardPage() {
           </div>
         ))}
       </section>
+      {notice ? <div className="mt-4 rounded-lg bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800">{notice}</div> : null}
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
