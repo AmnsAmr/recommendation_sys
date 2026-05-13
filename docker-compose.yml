@@ -13,6 +13,7 @@ services:
       VIDEO_SERVICE_URL: http://video-service:8082
       REC_SERVICE_URL: http://recommendation-service:8083
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     depends_on:
       - user-service
       - video-service
@@ -42,6 +43,7 @@ services:
       KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SERVER_PORT: 8081
     networks:
       - platform-net
@@ -72,6 +74,7 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SERVER_PORT: 8082
     networks:
       - platform-net
@@ -96,6 +99,7 @@ services:
       REDIS_PORT: 6379
       SVD_SIDECAR_URL: ${SVD_SIDECAR_URL}
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SERVER_PORT: 8083
     depends_on:
       - redis

@@ -1,14 +1,14 @@
-package org.vidrec.recommendationservice;
+package org.vidrec.apigateway;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.vidrec.recommendationservice.config.DotenvEnvironmentListener;
+import org.vidrec.apigateway.config.DotenvEnvironmentListener;
 
 @SpringBootApplication
-public class RecommendationServiceApplication {
+public class ApiGatewayApplication {
 
     public static void main(String[] args) {
-        SpringApplication application = new SpringApplication(RecommendationServiceApplication.class);
+        SpringApplication application = new SpringApplication(ApiGatewayApplication.class);
         application.addListeners(new DotenvEnvironmentListener());
         application.run(args);
     }

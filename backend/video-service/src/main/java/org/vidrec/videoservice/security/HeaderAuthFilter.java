@@ -6,8 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import java.util.UUID;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,22 +15,36 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
-@RequiredArgsConstructor
 public class HeaderAuthFilter extends OncePerRequestFilter {
 
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_USER_ROLE = "X-User-Role";
-    private static final String AUTHORIZATION_HEADER = "Authorization";
-    private static final String BEARER_PREFIX = "Bearer ";
+    private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
 
-    private final JwtUtil jwtUtil;
+    @Value("${INTERNAL_SERVICE_TOKEN}")
+    private String internalServiceToken;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return "/actuator/health".equals(path) || "/actuator/info".equals(path);
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
+        if (!isTrustedGatewayRequest(request)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
 
-        AuthContext authContext = extractAuthContext(request);
-        if (authContext != null) {
+        if (!isPublicRoute(request)) {
+            AuthContext authContext = extractAuthContext(request);
+            if (authContext == null || !StringUtils.hasText(authContext.userId())) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
+
             UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                 authContext.userId(),
                 null,
@@ -44,20 +57,6 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
     }
 
     private AuthContext extractAuthContext(HttpServletRequest request) {
-        String authorization = request.getHeader(AUTHORIZATION_HEADER);
-        if (StringUtils.hasText(authorization) && authorization.startsWith(BEARER_PREFIX)) {
-            String token = authorization.substring(BEARER_PREFIX.length()).trim();
-            if (StringUtils.hasText(token)) {
-                try {
-                    UUID userId = jwtUtil.extractUserId(token);
-                    UserRole role = jwtUtil.extractRole(token);
-                    return new AuthContext(userId.toString(), role);
-                } catch (RuntimeException ignored) {
-                    return null;
-                }
-            }
-        }
-
         String userIdHeader = request.getHeader(HEADER_USER_ID);
         if (StringUtils.hasText(userIdHeader)) {
             String roleHeader = request.getHeader(HEADER_USER_ROLE);
@@ -73,6 +72,23 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         }
 
         return null;
+    }
+
+    private boolean isPublicRoute(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+
+        String path = request.getRequestURI();
+        return "/videos/catalog".equals(path)
+            || "/videos/search".equals(path)
+            || path.matches("^/videos/[^/]+$")
+            || path.matches("^/videos/user/[^/]+$");
+    }
+
+    private boolean isTrustedGatewayRequest(HttpServletRequest request) {
+        String internalToken = request.getHeader(INTERNAL_TOKEN_HEADER);
+        return StringUtils.hasText(internalToken) && internalServiceToken.equals(internalToken);
     }
 
     private record AuthContext(String userId, UserRole role) {}
