@@ -1,0 +1,95 @@
+@startuml Classes_GestionUtilisateurs
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #555555
+skinparam ClassBackgroundColor #F8F8F8
+skinparam PackageBorderColor #888888
+
+title Diagramme de classes -- Sous-système GestionUtilisateurs
+
+' ============================================================
+' Enumerations utilisées dans ce sous-système
+' ============================================================
+enum "«Enumeration»\nRôle" as ERole {
+  UTILISATEUR
+  ADMINISTRATEUR
+}
+enum "«Enumeration»\nOrigineProfil" as EProfSrc {
+  DÉCLARÉ
+  INFÉRÉ
+}
+
+' ============================================================
+' Classes du sous-système
+' ============================================================
+package "«SousSystème» GestionUtilisateurs" as PkgUser {
+
+  class Utilisateur {
+    - identifiant : UUID [1]
+    - email : String [1]
+    - motDePasse : String [1]
+    - pseudo : String [1]
+    - nomAffiché : String [1]
+    - biographie : String [0..1]
+    - urlPhoto : String [0..1]
+    - actif : Booléen [1]
+    - dateInscription : Date [1]
+    - rôle : Rôle [1]
+    --
+    + S_inscrire( in email : String [1], in motDePasse : String [1], in pseudo : String [1], in intérêts : String [1..*] )
+    + Se_connecter( in email : String [1], in motDePasse : String [1] ) : Jeton
+    + Modifier_profil( in biographie : String [0..1], in urlPhoto : String [0..1] )
+    + Consulter_profil() : Utilisateur
+    + Se_déconnecter()
+    + Publier_vidéo( in titre : String [1], in description : String [0..1], in fichier : Fichier [1], in catégorie : Catégorie [1] ) : Vidéo
+    + Consulter_mes_vidéos() : Vidéo [*]
+  }
+
+  class Administrateur {
+    --
+    + Modérer_vidéo( in vidéo : Vidéo [1], in décision : StatutVidéo [1] )
+    + Bannir_utilisateur( in utilisateur : Utilisateur [1], in motif : String [1] )
+    + Réactiver_utilisateur( in utilisateur : Utilisateur [1] )
+    + Consulter_tableau_de_bord() : TableauDeBord
+    + Gérer_utilisateurs()
+  }
+
+  class PréférenceUtilisateur {
+    - catégorie : String [1]
+    - poids : Réel [1]
+    - source : OrigineProfil [1]
+    --
+    + Mettre_à_jour( in poids : Réel [1] )
+  }
+
+  Administrateur --|> Utilisateur
+  Utilisateur "1" *-- "1..*" PréférenceUtilisateur : possède
+  Utilisateur ..> ERole
+  PréférenceUtilisateur ..> EProfSrc
+}
+
+' ============================================================
+' Classes frontières (définies dans d'autres sous-systèmes)
+' Représentées avec une bordure pointillée pour indiquer
+' qu'elles sont décrites en détail ailleurs.
+' ============================================================
+class Vidéo <<frontière>> #white;line.dashed {
+}
+class Catégorie <<frontière>> #white;line.dashed {
+}
+class ProfilUtilisateur <<frontière>> #white;line.dashed {
+}
+
+Utilisateur "1" -- "*" Vidéo             : publie
+Utilisateur "1" -- "1" ProfilUtilisateur : décrit par
+
+note bottom of Vidéo
+  Voir 14b -- Sous-système
+  GestionVidéos
+end note
+note bottom of ProfilUtilisateur
+  Voir 14c -- Sous-système
+  Recommandation
+end note
+@enduml

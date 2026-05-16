@@ -1,53 +1,76 @@
-@startuml Kafka Event Flow
+@startuml Sequence_Flux_Evenements
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName Arial
+skinparam SequenceArrowColor #555555
+skinparam SequenceLifeLineBorderColor #888888
+skinparam SequenceBoxBorderColor #333333
 
-title Kafka Event Flow -- All Topics
+title Diagramme de séquence -- Flux d'événements entre sous-systèmes
+mainframe **sd** Flux d'événements
 
-participant "User Service\n:8081" as us
-participant "Video Service\n:8082" as vs
-queue "video.watched" as tw
-queue "video.liked" as tl
-queue "user.searched" as ts
-queue "video.uploaded" as tu
-queue "user.events" as tue
-participant "Rec Service\n:8083" as rec
+participant "GestionUtilisateurs" as US
+participant "GestionVidéos"       as VS
+queue       "Bus d'événements"    as BUS
+participant "Recommandation"      as REC
 
-note over tw, tue
-  All topics consumed exclusively
-  by Recommendation Service
+' 1. Événements émis par le sous-système Utilisateurs
+US  -> BUS : Publier événement utilisateur\n(inscription / désactivation / mise à jour préférences / bannissement)
+activate BUS
+BUS -> REC : Notifier événement utilisateur
+activate REC
+REC -> REC : Mettre à jour le profil utilisateur
+REC --> BUS : Accusé de réception
+deactivate REC
+deactivate BUS
+
+' 2. Événement de visionnage
+VS  -> BUS : Publier événement de visionnage
+activate BUS
+BUS -> REC : Notifier visionnage
+activate REC
+REC -> REC : Calculer le score
+REC -> REC : Mettre à jour les affinités
+REC -> REC : Invalider le cache
+REC --> BUS : Accusé de réception
+deactivate REC
+deactivate BUS
+
+' 3. Événement d'appréciation
+VS  -> BUS : Publier appréciation (aimée / non aimée)
+activate BUS
+BUS -> REC : Notifier appréciation
+activate REC
+REC -> REC : Mettre à jour les affinités
+REC -> REC : Invalider le cache
+REC --> BUS : Accusé de réception
+deactivate REC
+deactivate BUS
+
+' 4. Événement de recherche
+VS  -> BUS : Publier recherche (requête + résultat cliqué)
+activate BUS
+BUS -> REC : Notifier recherche
+activate REC
+REC -> REC : Mettre à jour le profil de contenu
+REC --> BUS : Accusé de réception
+deactivate REC
+deactivate BUS
+
+' 5. Événement de publication (après modération)
+VS  -> BUS : Publier nouvelle vidéo approuvée
+activate BUS
+BUS -> REC : Notifier publication
+activate REC
+REC -> REC : Indexer la vidéo
+REC --> BUS : Accusé de réception
+deactivate REC
+deactivate BUS
+
+note over BUS
+  Communication asynchrone via
+  un bus d'événements (Kafka).
+  Voir l'annexe pour le détail
+  des topics et des charges utiles.
 end note
-
-note over tw, tue
-  DLQ topics:
-  video.watched.dlq
-  video.liked.dlq
-  user.searched.dlq
-  video.uploaded.dlq
-  user.events.dlq
-end note
-
-us -> tue : publish\n{\n  eventId, userId,\n  eventType: registered | deactivated | prefs_updated | banned | deleted,\n  username?, interests[]?, preferences[]?, reason?,\n  timestamp\n}
-
-vs -> tw : publish\n{\n  eventId, userId,\n  videoId,\n  completionPct,\n  watchDuration,\n  videoDuration,\n  source: own|youtube,\n  timestamp\n}
-
-vs -> tl : publish\n{\n  eventId, userId,\n  videoId,\n  action: like|dislike,\n  source: own|youtube,\n  timestamp\n}
-
-vs -> ts : publish\n{\n  eventId, userId,\n  query,\n  resultVideoIds[],\n  clickedVideoId,\n  timestamp\n}
-
-vs -> tu : publish (only after admin approval)\n{\n  eventId, videoId,\n  title, description,\n  tags[], categoryId,\n  thumbnailUrl,\n  language,\n  source: own|youtube,\n  timestamp\n}
-
-tw -> rec : consume\n-> score = completionPct\n-> INSERT interaction\n-> update SVD factors\n-> update item_factors.view_count\n-> invalidate cache
-
-tl -> rec : consume\n-> score = like(1.0) | dislike(-1.0)\n-> INSERT interaction\n-> invalidate cache
-
-ts -> rec : consume\n-> score = 0.5 if clicked\n-> update content profile\n-> INSERT interaction
-
-tu -> rec : consume\n-> INSERT item_factors for approved/public video\n-> build content index\n-> (no cache invalidation)
-
-tue -> rec : consume (registered)\n-> INSERT user_category_profiles\n-> source = declared\n-> weight = 1.0
-
-tue -> rec : consume (banned/deleted)\n-> invalidate cache\n-> ignore moderated account state
-
 @enduml

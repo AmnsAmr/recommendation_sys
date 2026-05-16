@@ -1,0 +1,96 @@
+@startuml Classes_Recommandation
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #555555
+skinparam ClassBackgroundColor #F8F8F8
+skinparam PackageBorderColor #888888
+
+title Diagramme de classes -- Sous-système Recommandation
+
+' ============================================================
+' Enumerations utilisées dans ce sous-système
+' ============================================================
+enum "«Enumeration»\nTypeInteraction" as EEvent {
+  VISIONNAGE
+  APPRÉCIATION
+  REVISIONNAGE
+  CLIC_RECHERCHE
+}
+
+' ============================================================
+' Classes du sous-système
+' ============================================================
+package "«SousSystème» Recommandation" as PkgReco {
+
+  class Interaction {
+    - identifiant : UUID [1]
+    - type : TypeInteraction [1]
+    - score : Réel [1]
+    - date : Date [1]
+  }
+
+  class ProfilUtilisateur {
+    - vecteur : Réel [*]
+    - nombreInteractions : Entier [1]
+    - dateMiseÀJour : Date [1]
+    --
+    + Recalculer()
+  }
+
+  class ProfilVidéo {
+    - vecteur : Réel [*]
+    - scoreGlobal : Réel [1]
+    --
+    + Recalculer()
+  }
+
+  class MoteurRecommandation {
+    --
+    + Générer_recommandations( in utilisateur : Utilisateur [1], in limite : Entier [1] ) : Vidéo [*]
+    + Vidéos_similaires( in vidéo : Vidéo [1], in limite : Entier [1] ) : Vidéo [*]
+    + Démarrage_à_froid( in catégorie : Catégorie [1], in limite : Entier [1] ) : Vidéo [*]
+  }
+
+  ProfilUtilisateur "1" *-- "*" Interaction : agrège
+  MoteurRecommandation ..> ProfilUtilisateur : <<use>>
+  MoteurRecommandation ..> ProfilVidéo       : <<use>>
+
+  Interaction ..> EEvent
+}
+
+' ============================================================
+' Classe responsable des contraintes non fonctionnelles
+' (référence le sous-système de supervision -- voir profil)
+' ============================================================
+class Plateforme <<SupervisionSystème>> {
+  {Disponibilité = 99.9%}
+  {TransactionsSimultanées = 10000}
+  --
+  + Superviser_santé() : Booléen
+  + Mettre_à_l_échelle()
+}
+
+Plateforme ..> MoteurRecommandation : <<use>>
+
+' ============================================================
+' Classes frontières
+' ============================================================
+class Utilisateur <<frontière>> #white;line.dashed {
+}
+class Vidéo <<frontière>> #white;line.dashed {
+}
+
+Utilisateur "1" -- "1" ProfilUtilisateur : décrit par
+Vidéo       "1" -- "1" ProfilVidéo       : indexée par
+Interaction "*" -- "1" Vidéo             : cible
+
+note bottom of Utilisateur
+  Voir 14a -- Sous-système
+  GestionUtilisateurs
+end note
+note bottom of Vidéo
+  Voir 14b -- Sous-système
+  GestionVidéos
+end note
+@enduml

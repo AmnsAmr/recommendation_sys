@@ -9,35 +9,31 @@ skinparam SequenceBoxBorderColor #333333
 title Diagramme de séquence -- Visionnage & mise à jour des recommandations
 mainframe **sd** Visionnage d'une vidéo
 
-actor       "Utilisateur"      as U
-participant "Système"          as S
-database    "Base de données"  as DB
+actor       "Utilisateur"     as U
+participant "Système"         as S
+database    "Base de données" as DB
 
 ref over U, S, DB : Authentification (voir séquence dédiée)
 
-' 2. Lecture
-U -> S : Cliquer sur une vidéo
+' 1. Lecture de la vidéo
+U -> S : Regarder la vidéo (identifiant)
 activate S
 S -> DB : Charger la vidéo
 activate DB
-DB --> S : Détails de la vidéo
+DB --> S : Détails + flux vidéo
 deactivate DB
 S --> U : Lecteur vidéo
-deactivate S
 
-' 3. Suivi visionnage
-U -> S : Envoyer la progression (durée, pourcentage)
-activate S
+' 2. Suivi du visionnage (interne au système)
 S -> S : Calculer le score de visionnage
 S -> DB : Enregistrer la session de visionnage
 activate DB
 DB --> S : OK
 deactivate DB
 S -> S : Mettre à jour le profil utilisateur
-S --> U : Accusé de réception
 deactivate S
 
-' 4. Engagement
+' 3. Engagement (optionnel)
 alt L'utilisateur aime la vidéo
   U -> S : Aimer la vidéo
   activate S
@@ -59,7 +55,7 @@ else L'utilisateur n'aime pas
   deactivate S
 end
 
-' 5. Nouvelles recommandations
+' 4. Nouvelles recommandations
 U -> S : Revenir à l'accueil
 activate S
 S -> S : Vérifier les recommandations en cache

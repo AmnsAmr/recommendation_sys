@@ -14,32 +14,21 @@ actor       "Administrateur"  as A
 participant "Système"         as S
 database    "Base de données" as DB
 
-' 1. Authentification (reusable fragment, PPT rule SD6)
+' 1. Authentification (fragment réutilisable, règle SD6)
 ref over U, S, DB : Authentification (voir séquence dédiée)
 
-' 2. Métadonnées
-U  -> S  : Saisir titre + description + catégorie
+' 2. Téléversement de la vidéo (titre, description, catégorie + fichier en une requête)
+U  -> S  : Téléverser la vidéo (titre, description, catégorie, fichier)
 activate S
-S  -> DB : Créer la vidéo (statut = En attente)
+S  -> S  : Stocker le fichier
+S  -> DB : Créer la vidéo (statut = En revue)
 activate DB
 DB --> S : Identifiant vidéo
-deactivate DB
-S --> U  : Jeton de téléversement
-deactivate S
-
-' 3. Téléversement
-U  -> S  : Téléverser le fichier vidéo
-activate S
-S  -> S  : Vérifier le jeton
-S  -> S  : Stocker le fichier
-S  -> DB : Mettre à jour statut = En revue
-activate DB
-DB --> S : OK
 deactivate DB
 S --> U  : Confirmation (en attente de modération)
 deactivate S
 
-' 4. Modération
+' 3. Modération
 ref over A, S, DB : Authentification (voir séquence dédiée)
 A -> S : Consulter la file d'attente de modération
 activate S

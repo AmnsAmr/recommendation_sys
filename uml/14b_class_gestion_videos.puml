@@ -1,0 +1,121 @@
+@startuml Classes_GestionVideos
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #555555
+skinparam ClassBackgroundColor #F8F8F8
+skinparam PackageBorderColor #888888
+
+title Diagramme de classes -- Sous-système GestionVidéos
+
+' ============================================================
+' Enumerations utilisées dans ce sous-système
+' ============================================================
+enum "«Enumeration»\nStatutVidéo" as EStatus {
+  EN_ATTENTE
+  EN_REVUE
+  PUBLIÉE
+  REJETÉE
+}
+enum "«Enumeration»\nOrigineVidéo" as ESource {
+  PLATEFORME
+  YOUTUBE
+}
+enum "«Enumeration»\nLangue" as ELang {
+  FR
+  EN
+  ES
+  AR
+}
+enum "«Enumeration»\nTypeAppréciation" as EAction {
+  AIMÉE
+  NON_AIMÉE
+}
+
+' ============================================================
+' Classes du sous-système
+' ============================================================
+package "«SousSystème» GestionVidéos" as PkgVideo {
+
+  class Vidéo {
+    - identifiant : String [1]
+    - titre : String [1]
+    - description : String [0..1]
+    - durée : Entier [1]
+    - urlMiniature : String [1]
+    - nombreVues : Entier [1]
+    - nombreAppréciations : Entier [1]
+    - datePublication : Date [0..1]
+    - statut : StatutVidéo [1]
+    - origine : OrigineVidéo [1]
+    - langue : Langue [1]
+    --
+    + Lire() : Flux
+    + Incrémenter_vues()
+    + Approuver( in administrateur : Administrateur [1] )
+    + Rejeter( in administrateur : Administrateur [1], in motif : String [1] )
+    + Rechercher( in requête : String [1] ) : Vidéo [*]
+  }
+
+  class Catégorie {
+    - identifiant : String [1]
+    - nom : String [1]
+    --
+    + Lister_vidéos() : Vidéo [*]
+  }
+
+  class Étiquette {
+    - libellé : String [1]
+  }
+
+  class SessionVisionnage {
+    - identifiant : UUID [1]
+    - durée : Entier [1]
+    - pourcentageComplété : Réel [1]
+    - nombreRevisionnages : Entier [1]
+    - date : Date [1]
+    --
+    + Enregistrer()
+    + Calculer_score() : Réel
+  }
+
+  class Appréciation {
+    - type : TypeAppréciation [1]
+    - date : Date [1]
+    --
+    + Enregistrer()
+  }
+
+  Vidéo "1" *-- "1..*" Étiquette         : étiquettée par
+  Vidéo "*" o-- "1"    Catégorie         : classée dans
+  Vidéo "1" *-- "*"    SessionVisionnage : tracée par
+  Vidéo "1" *-- "*"    Appréciation      : appréciée par
+
+  Vidéo ..> EStatus
+  Vidéo ..> ESource
+  Vidéo ..> ELang
+  Appréciation ..> EAction
+}
+
+' ============================================================
+' Classes frontières
+' ============================================================
+class Utilisateur <<frontière>> #white;line.dashed {
+}
+class ProfilVidéo <<frontière>> #white;line.dashed {
+}
+
+Utilisateur "1" -- "*" Vidéo             : publie
+Utilisateur "1" -- "*" SessionVisionnage : réalise
+Utilisateur "1" -- "*" Appréciation      : émet
+Vidéo       "1" -- "1" ProfilVidéo       : indexée par
+
+note bottom of Utilisateur
+  Voir 14a -- Sous-système
+  GestionUtilisateurs
+end note
+note bottom of ProfilVidéo
+  Voir 14c -- Sous-système
+  Recommandation
+end note
+@enduml

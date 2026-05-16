@@ -1,0 +1,73 @@
+@startuml Cas_d_utilisation_Utilisateur
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam usecaseBackgroundColor #FAFAFA
+skinparam usecaseBorderColor #555555
+skinparam actorBorderColor #333333
+left to right direction
+
+title Diagramme de cas d'utilisation -- Côté Utilisateur
+
+' --- Actors with generalization ---
+:Visiteur:    as visitor
+:Utilisateur: as user
+user --|> visitor
+
+rectangle "Plateforme Vidéo" {
+
+  ' --- Visiteur scope (only these three) ---
+  usecase "S'inscrire"        as UC_Register
+  usecase "Se connecter"      as UC_Login
+  usecase "Choisir ses centres\nd'intérêt" as UC_Interests
+
+  ' --- Authenticated user features ---
+  usecase "Consulter le catalogue"        as UC_Catalog
+  usecase "Rechercher une vidéo"          as UC_Search
+  usecase "Regarder une vidéo"            as UC_Watch
+  usecase "Aimer / Ne pas aimer"          as UC_Like
+  usecase "Obtenir des\nrecommandations"  as UC_Reco
+  usecase "Publier une vidéo"             as UC_Upload
+  usecase "Gérer son profil"              as UC_Profile
+  usecase "Mettre à jour ses\npréférences" as UC_UpdatePrefs
+}
+
+' --- Visiteur associations: only register and login ---
+visitor -- UC_Register
+visitor -- UC_Login
+
+' --- Utilisateur associations (everything that needs auth) ---
+user -- UC_Catalog
+user -- UC_Search
+user -- UC_Watch
+user -- UC_Like
+user -- UC_Reco
+user -- UC_Upload
+user -- UC_Profile
+
+' --- «include» ---
+UC_Register ..> UC_Interests : <<include>>
+
+' Authenticated use cases include Login (except those that <<extend>> another)
+UC_Catalog ..> UC_Login : <<include>>
+UC_Search  ..> UC_Login : <<include>>
+UC_Watch   ..> UC_Login : <<include>>
+UC_Like    ..> UC_Login : <<include>>
+UC_Reco    ..> UC_Login : <<include>>
+UC_Upload  ..> UC_Login : <<include>>
+UC_Profile ..> UC_Login : <<include>>
+
+' --- «extend» (optional variants — these inherit Login through the base UC) ---
+UC_UpdatePrefs ..> UC_Profile : <<extend>>
+
+' --- NFRs as notes ---
+note right of UC_Watch
+  Disponibilité 99.9%
+  Latence démarrage < 2s
+end note
+note bottom of UC_Reco
+  Personnalisation basée sur
+  l'historique + préférences déclarées
+  Cache 10 min
+end note
+@enduml
