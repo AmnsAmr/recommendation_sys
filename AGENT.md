@@ -53,9 +53,9 @@ Primary references:
 | api-gateway-service | Routes, JWT validation, X-User-Id / X-User-Role / X-Internal-Token forwarding | rate limiting, mTLS |
 | user-service | Register / login / profile / preferences, admin moderation, admin bootstrap, `user.events` producer (after-commit) | no HTTP route exposes `deactivateUser`; no email verification / refresh token |
 | video-service | Upload (init + R2 + duration probe), catalog / search / watch / like / search-click, admin moderation, YouTube sync, transactional outbox, all 4 video topics | outbox has no retry counter / DLQ; no signed R2 URLs |
-| recommendation-service | Entities, repositories, header-auth security | **no controllers, no Kafka consumers, no Redis cache, no hybrid scorer, no SVD client** -- this is the biggest gap |
-| svd-sidecar | FastAPI scaffold | training / inference logic |
-| frontend | All page shells + admin shells + fake `localStorage` auth | **zero API integration; everything renders from `lib/mock-data.ts`** |
+| recommendation-service | Entities + repos, header-auth security, content engine (`ContentBasedService` + `ContentVectorizer`), `ItemFactorService`, `UserCategoryProfileService`, `ColdStartService` (by category and by user), `SimilarVideoService`, `RecommendationController` exposing `/similar/{videoId}` and `/cold/{categoryId}` | **no Kafka consumers / DLQ, no Redis cache, no hybrid scorer, no SVD client, no `/recommendations/{userId}` endpoint, no `shared/exception/` envelope** |
+| svd-sidecar | FastAPI scaffold (`/health`, stubbed `/train`, `/predict`) | real SVD training/inference, `/predict/batch`, DB I/O, factor reload |
+| frontend | Page shells + admin shells, real `lib/api.ts` client wired to gateway, real `POST /users/login` / `register` + JWT under `localStorage.auth_token`, catalog/search/video/upload calls plumbed | watch heartbeat + like/dislike + search-click tracking not wired; admin pages still partly on mock data; no hooks layer; duplicate top-level admin shells |
 
 ---
 
@@ -178,7 +178,9 @@ video_outbox(id UUID PK, aggregate_type VARCHAR, aggregate_id VARCHAR,
 interactions(id UUID PK, user_id UUID, video_id VARCHAR,
        event_type ENUM(watch,like,dislike,search_click,rewatch),
        score FLOAT, completion_pct FLOAT, created_at TIMESTAMP)
-user_factors(user_id UUID PK, vector FLOAT[], updated_at TIMESTAMP)
+user_factors(user_id UUID PK, vector FLOAT[],
+       interaction_count INTEGER NOT NULL DEFAULT 0,
+       last_trained_at TIMESTAMP NULL, updated_at TIMESTAMP)
 item_factors(video_id VARCHAR PK, vector FLOAT[], tags TEXT[],
        category_id VARCHAR, thumbnail_url VARCHAR, language VARCHAR(10),
        view_count BIGINT, global_score FLOAT, updated_at TIMESTAMP)
@@ -255,13 +257,14 @@ SVD_SIDECAR_URL=http://svd-sidecar:8000
 ### Recommendation Service (via gateway: /recommendations/**)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/recommendations/{userId}` | JWT | Personalized feed (cached) -- **not yet implemented** |
-| GET | `/recommendations/similar/{videoId}` | None | Similar videos -- **not yet implemented** |
-| GET | `/recommendations/cold/{categoryId}` | None | Cold start by category -- **not yet implemented** |
+| GET | `/recommendations/{userId}` | JWT | Personalized feed (cached) -- **not yet implemented** (Person C: hybrid scorer + SVD client + Redis cache) |
+| GET | `/recommendations/similar/{videoId}` | None | Similar videos via content cosine -- **implemented** |
+| GET | `/recommendations/cold/{categoryId}` | None | Cold start by category, ranked by `global_score` -- **implemented** |
 
-> The recommendation-service today has only entities + repositories + header-auth security. No
-> controllers, no Kafka consumers, no Redis cache, no SVD client are wired in yet. See
-> `backend/recommendation-service/AGENT.md` for the gap list.
+> The recommendation-service has the content engine, cold-start (by category and by user) and similar-video
+> path wired through `RecommendationController`. Still missing: Kafka consumers + DLQ, idempotency gate,
+> Redis cache, hybrid scorer, SVD sidecar client, and the JWT-protected `/recommendations/{userId}` endpoint.
+> See `backend/recommendation-service/AGENT.md` for the current gap list.
 
 ---
 

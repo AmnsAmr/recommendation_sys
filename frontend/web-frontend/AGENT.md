@@ -7,47 +7,49 @@
 
 Next.js 16.2.2 (App Router) + React 19 + TypeScript + Tailwind v4 frontend.
 
-**Today the UI runs entirely on mock data.** Every page renders from `src/lib/mock-data.ts`, auth is
-faked in `localStorage`, and there is no `lib/api.ts`. No HTTP call is made to the gateway from any
-page in `src/`. The visual shell, navigation, and admin views exist; wiring them to the real backend
-is the remaining work.
+The API client (`lib/api.ts`) is wired to the gateway and login / register / catalog / search / video
+detail / watch record / like / upload-init / upload-file / admin users / admin videos all call real
+endpoints. JWT is stored under `localStorage.auth_token` and sent as `Authorization: Bearer`. Auth
+state (`localStorage.user`) is still client-managed and is what `useAuth` and `AdminGuard` consume.
+
+The remaining gaps are tracker-style integrations (watch heartbeat, search-click tracking, like-button
+wiring on the watch page) and the recommendations feed (the back-end `/recommendations/{userId}`
+endpoint is itself not implemented yet).
 
 ---
 
 ## Current Implementation State
 
-### Implemented (UI shell only)
+### Implemented
 
 - [x] Project scaffold (Next.js 16.2.2, React 19, TypeScript, Tailwind v4)
 - [x] Page routes:
       - `/` -> redirects to `/login`
-      - `/login`, `/register`
-      - `/homepage` (category filter + grid of mock videos)
-      - `/watch` (mock player + comments + recommendations sidebar)
-      - `/upload` (form only, no submit)
+      - `/login`, `/register` -- call real `POST /users/login` / `/users/register`, store JWT under `localStorage.auth_token`, user payload under `localStorage.user`
+      - `/homepage` (category filter + catalog grid backed by `GET /videos/catalog`)
+      - `/watch` (player + comments + recommendations sidebar -- player/source resolution wired, tracking and like buttons still simulated)
+      - `/upload` (calls `POST /videos/init` + `PUT /videos/{id}/upload` with `X-Upload-Token`)
       - `/profile`, `/history`
-      - Admin: `/admin/dashboard`, `/admin/user-management`, `/admin/video-moderation`
-      - Legacy/duplicate top-level admin shells: `/admin-dashboard`, `/user-management`, `/video-moderation`
+      - Admin: `/admin/dashboard`, `/admin/user-management`, `/admin/video-moderation` (real admin user / admin video dashboard + pending queue + approve/reject/ban/unban/delete)
+      - Legacy/duplicate top-level admin shells: `/admin-dashboard`, `/user-management`, `/video-moderation` (kept for now; pick one set and delete the other)
+- [x] `lib/api.ts` -- typed fetch wrapper around `NEXT_PUBLIC_API_URL` (default `http://localhost:8080`); attaches `Authorization: Bearer <auth_token>` unless `auth: false`; parses the `{ error: { code, message } }` envelope on non-2xx
+- [x] `lib/types.ts` -- shared `AuthResponse`, `ApiVideo`, `VideoListResponse`, `VideoUploadInitResponse`, `AdminDashboardResponse`, `AdminUserListResponse`, `AdminVideoDashboardResponse`, `AdminVideoListResponse`, `AuthUser`
+- [x] `lib/video-mapper.ts` -- maps backend `ApiVideo` to UI props
+- [x] `lib/auth.tsx` -- `useAuth` (via `useSyncExternalStore` on `localStorage.user`), `isAdminUser`, `AdminGuard`; `logout()` clears both `auth_token` and `user`
+- [x] `lib/history.ts` -- `localStorage`-backed watch history with subscribe/emit
+- [x] `lib/mock-data.ts` -- still present as a fallback dataset for parts of the watch page (comments, recommendation sidebar)
 - [x] Shared components: `app-shell`, `admin-shell`, `brand-mark`, `video-card`, `video-poster`
-- [x] Fake auth helper: `lib/auth.tsx` -- `useAuth` (reads `localStorage.user`), `isAdminUser`, `AdminGuard`
-- [x] Local watch history: `lib/history.ts` -- `localStorage`-backed with subscribe/emit pattern
-- [x] Mock dataset: `lib/mock-data.ts` -- `categories`, `videos`, `comments`
 
 ### Not implemented
 
-- [ ] `lib/api.ts` -- API client; required by RULES.md §5
-- [ ] `lib/types.ts` -- shared response types
-- [ ] `hooks/` directory (no `useRecommendations`, `useVideo`, `useWatchTracker`)
-- [ ] Real `POST /users/register` / `POST /users/login` -- login currently fabricates a user from email + a role toggle
-- [ ] Real JWT storage / refresh -- only `{email, role, username}` is stored under `localStorage.user`; the gateway expects a real bearer token
-- [ ] Real homepage feed (`GET /recommendations/{userId}` or `/videos/catalog`)
-- [ ] Real video player using R2 URL (`source=own`) or YouTube iframe (`source=youtube`)
-- [ ] Watch tracking heartbeat -- progress is simulated client-side; no `POST /videos/watch` call
-- [ ] Like / dislike buttons wired to `POST /videos/{id}/like`
-- [ ] Search input + `POST /videos/search/click` tracking
-- [ ] Upload flow (`POST /videos/init` + `PUT /videos/{id}/upload` with the `X-Upload-Token`)
-- [ ] Admin pages backed by `/admin/users/**` and `/admin/videos/**` data
-- [ ] Error boundaries, pagination, loading states tied to real fetches
+- [ ] `hooks/` directory (`useRecommendations`, `useVideo`, `useWatchTracker`) -- API calls live inline in page components today
+- [ ] Watch tracking heartbeat -- the watch page does not yet `POST /videos/watch` on heartbeat / end / `beforeunload`
+- [ ] Like / dislike wired to `POST /videos/{id}/like` (the API method exists in `lib/api.ts` but is not called from `watch/page.tsx`)
+- [ ] Search-click tracking -- no `POST /videos/search/click` call
+- [ ] Recommendation feed -- the back-end `GET /recommendations/{userId}` is not implemented; the homepage uses `/videos/catalog` as a placeholder, and the watch-page sidebar is still mock
+- [ ] Error boundaries, pagination, loading skeletons, toast/notification system
+- [ ] Tests
+- [ ] Decide between `/admin/*` and the legacy top-level admin shells and delete the loser
 
 ---
 
@@ -85,62 +87,60 @@ web-frontend/
       |   |-- video-card.tsx
       |   `-- video-poster.tsx
       `-- lib/
+          |-- api.ts
           |-- auth.tsx
           |-- history.ts
-          `-- mock-data.ts
+          |-- mock-data.ts
+          |-- types.ts
+          `-- video-mapper.ts
 ```
 
 ---
 
-## Folder Structure (target -- when API wiring lands)
+## Folder Structure (target -- next steps)
+
+Add a `hooks/` directory so per-page API logic stops growing inline:
 
 ```
 src/
-  |-- app/                        # as above
-  |-- components/                 # as above + RecommendationFeed, SearchBar, VideoPlayer, UploadForm
-  |-- lib/
-  |   |-- api.ts                  # fetch wrapper using NEXT_PUBLIC_API_URL
-  |   |-- auth.ts                 # real JWT helpers (replaces lib/auth.tsx fake)
-  |   `-- types.ts                # response DTO types mirroring api-contract/
   `-- hooks/
-      |-- useRecommendations.ts
-      |-- useVideo.ts
-      `-- useWatchTracker.ts
+      |-- useRecommendations.ts   # GET /recommendations/{userId} (once the backend lands)
+      |-- useVideo.ts             # GET /videos/{id} + source resolution
+      `-- useWatchTracker.ts      # heartbeat + on-end + beforeunload -> POST /videos/watch
 ```
 
 ---
 
-## Key Rules for This App (apply when wiring real APIs)
+## Key Rules for This App
 
-1. All API calls go through `lib/api.ts` (RULES.md §5 TypeScript rule).
-2. Base URL comes from `NEXT_PUBLIC_API_URL` (already wired in `docker-compose.yml` to `http://api-gateway:8080`).
-3. JWT stored in `localStorage.auth_token` and sent as `Authorization: Bearer <token>`. Replace the
-   current `localStorage.user` shape -- it stores only `{email, role, username}`, not a real token.
-4. Watch tracking: heartbeat every 30 s + on-end + `beforeunload`, posting completion percentage to
-   `POST /videos/watch`.
-5. Search click tracking: `POST /videos/search/click` with `{query, resultVideoIds, clickedVideoId}`.
+1. All API calls go through `lib/api.ts` (RULES.md §5 TypeScript rule). Do not call `fetch` directly from components.
+2. Base URL comes from `NEXT_PUBLIC_API_URL` (already wired in `docker-compose.yml` to `http://api-gateway:8080`; defaults to `http://localhost:8080`).
+3. JWT lives in `localStorage.auth_token`. `localStorage.user` is a UI convenience cache, not the source of truth.
+4. Watch tracking (not wired yet): heartbeat every 30 s + on-end + `beforeunload`, calling `api.recordWatch(...)`.
+5. Search-click tracking (not wired yet): call `POST /videos/search/click` with `{query, resultVideoIds, clickedVideoId}` when a search result is opened.
 6. Player logic:
    - `source == "youtube"` -> YouTube iframe using `youtubeId`
-   - `source == "own"` -> HTML5 `<video>` with the URL from `VideoResponse.url`
-7. Admin pages must call `/admin/users/**` and `/admin/videos/**`; current `AdminGuard` only checks the
-   client-side `role` field and offers no real authorization.
+   - `source == "own"` -> HTML5 `<video>` with the URL from `ApiVideo.url`
+7. `AdminGuard` is a client-side UX gate only -- the real authorization is the gateway / downstream `ROLE_ADMIN` check. Treat the local `user.role` as advisory, not authoritative.
 
 ---
 
 ## Files to Read First
 
-1. `src/lib/mock-data.ts` (until the API client exists, this is the data source)
-2. `src/lib/auth.tsx` (fake auth that the new `lib/auth.ts` must replace)
-3. `src/components/app-shell.tsx`, `src/components/admin-shell.tsx` (layout entry points)
-4. `src/app/homepage/page.tsx` (first place to swap mock -> API)
-5. `src/app/watch/page.tsx` (most complex page; needs player + tracking + like/dislike wiring)
+1. `src/lib/api.ts` (every API call goes through here)
+2. `src/lib/types.ts` (the response DTO shapes the rest of the app depends on)
+3. `src/lib/auth.tsx` (auth state + `AdminGuard`)
+4. `src/components/app-shell.tsx`, `src/components/admin-shell.tsx` (layout entry points)
+5. `src/app/homepage/page.tsx` (catalog wiring)
+6. `src/app/watch/page.tsx` (most complex page; still needs heartbeat + like/dislike + search-click wiring)
 
 ---
 
 ## Known Issues / TODOs
 
-- Zero API integration -- the backend exists but the UI never calls it. This is the single biggest gap before the project is end-to-end functional.
-- Duplicate admin shells at both `/admin/...` and top-level `/admin-dashboard`, `/user-management`, `/video-moderation`; one set should be removed once the real flow is decided.
-- `lib/auth.tsx` accepts any email/password and a free-text role toggle -- replace before exposing.
+- Watch heartbeat, like/dislike, and search-click tracking are still simulated -- `lib/api.ts` already has the methods (`recordWatch`, `likeVideo`); they just aren't called from `watch/page.tsx`.
+- Recommendation feed is blocked on the back-end -- `GET /recommendations/{userId}` is not implemented yet, so the homepage feed falls back to `/videos/catalog` and the watch-page sidebar is still on mock data.
+- Duplicate admin shells live at both `/admin/...` and top-level `/admin-dashboard`, `/user-management`, `/video-moderation`; decide which set is canonical and delete the other.
 - No pagination, loading skeletons, error states, or toast/notification system on data-driven pages.
+- No `hooks/` layer -- per-page API code is still inline.
 - No tests.
