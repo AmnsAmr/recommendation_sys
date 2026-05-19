@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -17,7 +18,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "user_category_profiles", schema = "recommendation_schema")
+@Table(
+        name = "user_category_profiles",
+        schema = "recommendation_schema",
+        indexes = @Index(name = "idx_user_category_profiles_user_id", columnList = "user_id"))
 @Getter
 @Setter
 @NoArgsConstructor

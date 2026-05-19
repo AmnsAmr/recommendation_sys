@@ -30,10 +30,11 @@ public class UserFactor {
     private UUID userId;
 
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(columnDefinition = "float[]")
+    @Column
     private Double[] vector;
 
     @Column(name = "interaction_count", nullable = false)
+    @Builder.Default
     private Integer interactionCount = 0;
 
     @Column(name = "last_trained_at")
