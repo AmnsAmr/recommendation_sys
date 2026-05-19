@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { api, setAuthToken } from "@/lib/api";
+import { emitAuthChange } from "@/lib/auth";
 import { categories } from "@/lib/mock-data";
 
 const interests = categories.filter((category) => category !== "For you");
@@ -14,9 +16,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("user");
   const [selected, setSelected] = useState(["Fashion", "Music"]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const toggle = (interest: string) => {
     setSelected((current) =>
@@ -24,7 +26,7 @@ export default function RegisterPage() {
     );
   };
 
-  const handleRegister = (event: React.FormEvent) => {
+  const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!displayName.trim() || !email.trim() || !password) {
@@ -32,8 +34,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must contain at least 6 characters.");
+    if (password.length < 8) {
+      setError("Password must contain at least 8 characters.");
       return;
     }
 
@@ -47,16 +49,36 @@ export default function RegisterPage() {
       return;
     }
 
-    const user = {
-      email,
-      role,
-      username: displayName.trim() || email.split("@")[0],
-      interests: selected,
-    };
+    setLoading(true);
+    setError("");
 
-    localStorage.setItem("user", JSON.stringify(user));
-    localStorage.setItem("videorec-created-account", JSON.stringify(user));
-    router.push(role === "admin" ? "/admin/dashboard" : "/homepage");
+    try {
+      const username = (displayName.trim() || email.split("@")[0]).replace(/[^a-zA-Z0-9_]/g, "_");
+      const response = await api.register({
+        email,
+        password,
+        username,
+        displayName: displayName.trim(),
+        interests: selected,
+      });
+      setAuthToken(response.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          userId: response.userId,
+          email,
+          role: response.role,
+          username: response.username,
+          displayName: response.displayName,
+        }),
+      );
+      emitAuthChange();
+      router.push(response.role.toLowerCase() === "admin" ? "/admin/dashboard" : "/homepage");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to create account.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,7 +150,7 @@ export default function RegisterPage() {
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     className="field mt-2 h-12 rounded-xl px-4"
                   />
                 </label>
@@ -143,27 +165,6 @@ export default function RegisterPage() {
                     className="field mt-2 h-12 rounded-xl px-4"
                   />
                 </label>
-              </div>
-
-              <div className="mt-5">
-                <span className="text-sm font-bold text-slate-700">Account type</span>
-                <div className="mt-2 grid grid-cols-2 rounded-full bg-slate-100 p-1">
-                  {[
-                    ["user", "User"],
-                    ["admin", "Admin"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setRole(value)}
-                      className={`rounded-full px-4 py-2 text-sm font-black transition ${
-                        role === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div className="mt-6">
@@ -190,8 +191,8 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <button type="submit" className="mt-6 h-12 w-full rounded-full bg-gradient-to-r from-teal-700 to-orange-500 px-5 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01]">
-                Create account
+              <button disabled={loading} type="submit" className="mt-6 h-12 w-full rounded-full bg-gradient-to-r from-teal-700 to-orange-500 px-5 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70">
+                {loading ? "Creating..." : "Create account"}
               </button>
 
               <p className="mt-6 text-center text-sm text-slate-500">

@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-
-type User = {
-  email: string;
-  role: string;
-  username: string;
-};
+import { clearAuthToken } from "@/lib/api";
+import type { AuthUser } from "@/lib/types";
 
 const AUTH_EVENT = "videorec-auth-change";
+
+export function emitAuthChange() {
+  window.dispatchEvent(new Event(AUTH_EVENT));
+}
 
 function readUserSnapshot() {
   if (typeof window === "undefined") {
@@ -29,19 +29,19 @@ function subscribeToAuthChanges(onStoreChange: () => void) {
   };
 }
 
-function parseUser(value: string | null): User | null {
+function parseUser(value: string | null): AuthUser | null {
   if (!value) {
     return null;
   }
 
   try {
-    return JSON.parse(value) as User;
+    return JSON.parse(value) as AuthUser;
   } catch {
     return null;
   }
 }
 
-export function isAdminUser(user: User | null) {
+export function isAdminUser(user: AuthUser | null) {
   return user?.role?.toLowerCase() === "admin";
 }
 
@@ -91,7 +91,8 @@ export function useAuth() {
 
   const logout = () => {
     window.localStorage.removeItem("user");
-    window.dispatchEvent(new Event(AUTH_EVENT));
+    clearAuthToken();
+    emitAuthChange();
     window.location.href = "/login";
   };
 

@@ -1,10 +1,36 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { videos } from "@/lib/mock-data";
+import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 const interests = ["Backend", "AI", "Data"];
 
 export default function ProfilePage() {
+  const { user } = useAuth();
+  const [uploads, setUploads] = useState<UiVideo[]>(
+    videos.slice(0, 4).map((video) => ({
+      ...video,
+      id: video.title,
+      durationSeconds: 0,
+      source: "own",
+    })),
+  );
+
+  useEffect(() => {
+    if (!user?.userId) {
+      return;
+    }
+
+    api.getUserVideos(user.userId)
+      .then((response) => setUploads(response.videos.map(fromApiVideo)))
+      .catch(() => undefined);
+  }, [user?.userId]);
+
   return (
     <AppShell title="Creator profile" eyebrow="Account">
       <section className="grid gap-6 lg:grid-cols-[0.78fr_1.22fr]">
@@ -12,15 +38,15 @@ export default function ProfilePage() {
           <div className="flex items-start gap-4">
             <div className="grid h-20 w-20 place-items-center rounded-lg bg-slate-950 text-2xl font-black text-white">AL</div>
             <div>
-              <p className="text-sm text-slate-500">@alice_dev</p>
-              <h1 className="mt-1 text-3xl font-black text-slate-950">Alice</h1>
+              <p className="text-sm text-slate-500">@{user?.username || "guest"}</p>
+              <h1 className="mt-1 text-3xl font-black text-slate-950">{user?.displayName || user?.username || "Guest"}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-600">Backend developer focused on Java, data systems, and clean APIs.</p>
             </div>
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-2">
             {[
-              ["Videos", "3"],
+              ["Videos", String(uploads.length)],
               ["Views", "8.4k"],
               ["Match", "94%"],
             ].map(([label, value]) => (
@@ -57,7 +83,7 @@ export default function ProfilePage() {
             </a>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {videos.slice(0, 4).map((video) => (
+            {uploads.map((video) => (
               <VideoCard key={video.title} video={video} />
             ))}
           </div>

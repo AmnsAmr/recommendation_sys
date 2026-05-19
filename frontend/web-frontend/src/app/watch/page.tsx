@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
+import { api, getAuthToken } from "@/lib/api";
 import { saveHistory } from "@/lib/history";
 import { comments, videos } from "@/lib/mock-data";
+import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 function subscribeToUrlChange(onChange: () => void) {
   window.addEventListener("popstate", onChange);
@@ -38,15 +40,46 @@ function formatTime(value: number) {
 
 export default function WatchPage() {
   const search = useSyncExternalStore(subscribeToUrlChange, readSearch, () => "");
-  const currentVideo = useMemo(() => {
-    const title = new URLSearchParams(search).get("video");
-    return videos.find((video) => video.title === title) || videos[0];
+  const requestedVideo = useMemo(() => {
+    const value = new URLSearchParams(search).get("video");
+    const fallback = videos.find((video) => video.title === value) || videos[0];
+    return {
+      ...fallback,
+      id: value || fallback.title,
+      durationSeconds: parseDuration(fallback.duration),
+      source: "own",
+    };
   }, [search]);
+  const [currentVideo, setCurrentVideo] = useState<UiVideo>(requestedVideo);
 
-  return <WatchExperience key={currentVideo.title} currentVideo={currentVideo} />;
+  useEffect(() => {
+    setCurrentVideo(requestedVideo);
+    if (!requestedVideo.id || requestedVideo.id === requestedVideo.title) {
+      return;
+    }
+
+    let active = true;
+    api.getVideo(requestedVideo.id)
+      .then((video) => {
+        if (active) {
+          setCurrentVideo(fromApiVideo(video));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCurrentVideo(requestedVideo);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [requestedVideo]);
+
+  return <WatchExperience key={currentVideo.id} currentVideo={currentVideo} />;
 }
 
-function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[number] }) {
+function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -56,8 +89,22 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
   const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const durationSeconds = parseDuration(currentVideo.duration);
-  const progressPct = Math.min((progress / durationSeconds) * 100, 100);
+  const durationSeconds = currentVideo.durationSeconds || parseDuration(currentVideo.duration);
+  const progressPct = Math.min((progress / Math.max(durationSeconds, 1)) * 100, 100);
+
+  const sendWatchEvent = (watchDuration: number) => {
+    if (!getAuthToken() || !currentVideo.id) {
+      return;
+    }
+
+    api.recordWatch({
+      videoId: currentVideo.id,
+      watchDuration: Math.round(watchDuration),
+      videoDuration: Math.max(durationSeconds, 1),
+      completionPct: Math.min(watchDuration / Math.max(durationSeconds, 1), 1),
+      source: currentVideo.source === "youtube" ? "youtube" : "own",
+    }).catch(() => undefined);
+  };
 
   useEffect(() => {
     if (!playing) {
@@ -69,6 +116,7 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
         if (value >= durationSeconds) {
           window.clearInterval(interval);
           setPlaying(false);
+          sendWatchEvent(durationSeconds);
           return durationSeconds;
         }
 
@@ -78,6 +126,15 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
 
     return () => window.clearInterval(interval);
   }, [durationSeconds, playing]);
+
+  useEffect(() => {
+    if (!playing) {
+      return;
+    }
+
+    const heartbeat = window.setInterval(() => sendWatchEvent(progress), 30000);
+    return () => window.clearInterval(heartbeat);
+  }, [currentVideo.id, durationSeconds, playing, progress]);
 
   const triggerReaction = (value: string) => {
     setReaction(value);
@@ -93,6 +150,9 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
         progress: Math.max(progressPct, 1),
       });
     }
+    if (playing) {
+      sendWatchEvent(progress);
+    }
     triggerReaction(playing ? "paused" : "playing");
   };
 
@@ -102,17 +162,43 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
         <section className="min-w-0">
           <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-xl">
             <div className="relative">
-              <VideoPoster kind={currentVideo.poster} className="aspect-video rounded-none" player />
-              <button
-                type="button"
-                onClick={togglePlay}
-                className="absolute inset-0 grid place-items-center text-white"
-                aria-label={playing ? "Pause video" : "Play video"}
-              >
-                <span className="pressable rounded-full bg-white/95 px-7 py-4 text-sm font-black uppercase tracking-wide text-slate-950 shadow-2xl">
-                  {playing ? "Pause" : "Play"}
-                </span>
-              </button>
+              {currentVideo.source === "youtube" && currentVideo.youtubeId ? (
+                <iframe
+                  className="aspect-video w-full"
+                  src={`https://www.youtube.com/embed/${currentVideo.youtubeId}`}
+                  title={currentVideo.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : currentVideo.url ? (
+                <video
+                  className="aspect-video w-full bg-slate-950"
+                  src={currentVideo.url}
+                  poster={currentVideo.thumbnailUrl}
+                  controls
+                  onPlay={() => setPlaying(true)}
+                  onPause={() => {
+                    setPlaying(false);
+                    sendWatchEvent(progress);
+                  }}
+                  onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
+                  onEnded={() => sendWatchEvent(durationSeconds)}
+                />
+              ) : (
+                <>
+                  <VideoPoster kind={currentVideo.poster} className="aspect-video rounded-none" player />
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="absolute inset-0 grid place-items-center text-white"
+                    aria-label={playing ? "Pause video" : "Play video"}
+                  >
+                    <span className="pressable rounded-full bg-white/95 px-7 py-4 text-sm font-black uppercase tracking-wide text-slate-950 shadow-2xl">
+                      {playing ? "Pause" : "Play"}
+                    </span>
+                  </button>
+                </>
+              )}
               {playing ? (
                 <div className="absolute left-4 top-4 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-950">
                   Playing now
@@ -147,6 +233,7 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
                   onClick={() => {
                     setLiked((value) => !value);
                     setDisliked(false);
+                    api.likeVideo(currentVideo.id, "like").catch(() => undefined);
                     triggerReaction("liked");
                   }}
                   className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition ${
@@ -159,6 +246,7 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
                   onClick={() => {
                     setDisliked((value) => !value);
                     setLiked(false);
+                    api.likeVideo(currentVideo.id, "dislike").catch(() => undefined);
                     triggerReaction("noted");
                   }}
                   className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition ${
@@ -282,7 +370,7 @@ function WatchExperience({ currentVideo }: { currentVideo: (typeof videos)[numbe
             <h2 className="text-lg font-black text-slate-950">Up next</h2>
             <div className="mt-4 grid gap-3">
               {videos.filter((video) => video.title !== currentVideo.title).slice(0, 7).map((video) => (
-                <VideoCard key={video.title} video={video} compact />
+                <VideoCard key={video.title} video={{ ...video, id: video.title, durationSeconds: parseDuration(video.duration), source: "own" }} compact />
               ))}
             </div>
           </div>

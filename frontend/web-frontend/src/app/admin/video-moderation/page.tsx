@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { VideoPoster } from "@/components/video-poster";
+import { api } from "@/lib/api";
 import { videos } from "@/lib/mock-data";
+import type { AdminVideo } from "@/lib/types";
 
 const initialQueue = videos.slice(0, 4).map((video, index) => ({
   ...video,
@@ -12,13 +14,44 @@ const initialQueue = videos.slice(0, 4).map((video, index) => ({
   notes: "",
 }));
 
-type QueueVideo = (typeof initialQueue)[number];
+type QueueVideo = (typeof initialQueue)[number] & { videoId?: string };
+
+function fromApiVideo(video: AdminVideo): QueueVideo {
+  return {
+    title: video.title,
+    creator: video.uploaderId?.slice(0, 8) || "creator",
+    channel: "VideoRec",
+    views: "0",
+    uploadedAt: video.createdAt ? new Date(video.createdAt).toLocaleDateString() : "Recently",
+    duration: "00:00",
+    category: "Upload",
+    score: "Pending",
+    poster: "video",
+    description: "Pending uploaded video.",
+    status: video.status === "ready" ? "Approved" : video.status === "rejected" ? "Rejected" : "Under review",
+    uploaded: video.createdAt ? new Date(video.createdAt).toLocaleDateString() : "Recently",
+    notes: "",
+    videoId: video.videoId,
+  };
+}
 
 export default function VideoModerationPage() {
   const [queue, setQueue] = useState<QueueVideo[]>(initialQueue);
   const [filter, setFilter] = useState("All videos");
   const [selectedTitle, setSelectedTitle] = useState(initialQueue[0]?.title || "");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    api.getPendingVideos()
+      .then((response) => {
+        const mapped = response.videos.map(fromApiVideo);
+        if (mapped.length > 0) {
+          setQueue(mapped);
+          setSelectedTitle(mapped[0].title);
+        }
+      })
+      .catch(() => setNotice("Admin video API unavailable. Showing local sample queue."));
+  }, []);
 
   const visibleQueue = useMemo(
     () => queue.filter((video) => filter === "All videos" || video.status === filter),
@@ -28,6 +61,17 @@ export default function VideoModerationPage() {
   const selectedVideo = queue.find((video) => video.title === selectedTitle) || queue[0];
 
   const updateVideo = (title: string, changes: Partial<QueueVideo>, message: string) => {
+    const current = queue.find((video) => video.title === title);
+    if (current?.videoId && changes.status) {
+      const request =
+        changes.status === "Approved"
+          ? api.approveVideo(current.videoId, current.notes)
+          : changes.status === "Rejected"
+            ? api.rejectVideo(current.videoId, current.notes)
+            : Promise.resolve();
+      request.catch(() => setNotice("Backend moderation failed. Change applied only in the UI."));
+    }
+
     setQueue((current) => current.map((video) => (video.title === title ? { ...video, ...changes } : video)));
     setSelectedTitle(title);
     setNotice(message);

@@ -44,8 +44,8 @@ public class User {
     private String displayName;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private UserRole role = UserRole.USER;
+    @Column(length = 20)
+    private UserRole role;
 
     @Column
     private String bio;
@@ -76,6 +76,9 @@ public class User {
         }
         if (updatedAt == null) {
             updatedAt = now;
+        }
+        if (role == null) {
+            role = UserRole.USER;
         }
     }
 
