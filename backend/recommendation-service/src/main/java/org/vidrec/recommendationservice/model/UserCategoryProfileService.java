@@ -7,6 +7,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.vidrec.recommendationservice.recommendation.RecommendationCategoryMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +36,8 @@ public class UserCategoryProfileService {
         LocalDateTime now = LocalDateTime.now();
         return categories.stream()
                 .filter(category -> category != null && !category.isBlank())
-                .map(String::trim)
+                .map(RecommendationCategoryMapper::normalize)
+                .filter(category -> category != null && !category.isBlank())
                 .distinct()
                 .map(category -> UserCategoryProfile.builder()
                         .userId(userId)

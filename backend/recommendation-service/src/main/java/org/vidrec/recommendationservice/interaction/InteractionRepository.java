@@ -9,4 +9,5 @@ public interface InteractionRepository extends JpaRepository<Interaction, UUID> 
     List<Interaction> findByVideoId(String videoId);
     long countByUserId(UUID userId);
     List<Interaction> findByUserIdAndVideoId(UUID userId, String videoId);
+    boolean existsByUserIdAndVideoId(UUID userId, String videoId);
 }

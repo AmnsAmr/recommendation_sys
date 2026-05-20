@@ -66,8 +66,8 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         }
 
         String path = request.getRequestURI();
-        return path.matches("^/recommendations/cold/[^/]+$")
-            || path.matches("^/recommendations/similar/[^/]+$");
+        return path.startsWith("/recommendations/cold/")
+            || path.startsWith("/recommendations/similar/");
     }
 
     private AuthContext extractAuthContext(HttpServletRequest request) {

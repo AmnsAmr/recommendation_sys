@@ -5,6 +5,10 @@ import type {
   AdminVideoListResponse,
   ApiVideo,
   AuthResponse,
+  ColdStartRecommendationsResponse,
+  RecommendationResponse,
+  SimilarVideosResponse,
+  UserProfile,
   VideoListResponse,
   VideoUploadInitResponse,
 } from "@/lib/types";
@@ -93,7 +97,7 @@ export const api = {
   },
 
   getProfile(userId: string) {
-    return apiRequest(`/users/${userId}/profile`);
+    return apiRequest<UserProfile>(`/users/${userId}/profile`);
   },
 
   getCatalog(params: { categoryId?: string; page?: number; size?: number } = {}) {
@@ -214,5 +218,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ notes }),
     });
+  },
+
+  // -- Recommendations --
+  getPersonalizedRecommendations(userId: string) {
+    return apiRequest<RecommendationResponse>(`/recommendations/${userId}`);
+  },
+
+  getColdStartRecommendations(categoryId: string) {
+    return apiRequest<ColdStartRecommendationsResponse>(`/recommendations/cold/${categoryId}`);
+  },
+
+  getSimilarVideos(videoId: string) {
+    return apiRequest<SimilarVideosResponse>(`/recommendations/similar/${videoId}`);
   },
 };

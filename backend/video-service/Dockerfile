@@ -12,6 +12,7 @@ RUN ./mvnw -q -DskipTests package
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
+COPY --from=build /app/ca.pem /app/client.keystore.p12 /app/client.truststore.jks ./
 COPY --from=build /app/target/*.jar /app/app.jar
 EXPOSE 8082
 

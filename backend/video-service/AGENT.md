@@ -25,7 +25,7 @@ It also owns moderation for platform-uploaded videos and exposes admin video das
 - [x] POST /videos/watch -- `WatchService.recordWatch()` inserts watch_session + publishes video.watched
 - [x] POST /videos/{id}/like -- `LikeService.recordLike()` atomic counter updates + publishes video.liked
 - [x] POST /videos/search/click -- `SearchService.recordClick()` publishes user.searched
-- [ ] YouTube sync -- **not implemented** (no `youtube/` package yet; `VideoSource.YOUTUBE` enum exists)
+- [x] YouTube sync (`youtube/` package implements quota-aware sync and runner)
 - [x] Admin moderation queue / approve / reject / delete (`AdminVideoController` + `AdminVideoService`)
 - [x] Admin dashboard metrics (`AdminVideoService.getDashboard()`)
 - [x] Transactional outbox (`outbox/OutboxEvent` + `OutboxPublisher`, 1s `@Scheduled` drain)

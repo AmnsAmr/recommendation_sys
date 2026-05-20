@@ -13,20 +13,20 @@ Caches results in Redis. Handles cold start for new users.
 
 ## Current Implementation State
 
-- [ ] Project scaffold (Spring Boot, dependencies, application.properties)
-- [ ] Kafka consumers for all topics
-- [ ] Idempotency via processed_events
-- [ ] Interactions table insert on every event
-- [ ] Item factors update on video.uploaded and video.watched
-- [ ] User category profile insert on user.events (registered)
-- [ ] Handle user.events (prefs_updated, deactivated)
-- [ ] Content-based engine (cosine similarity)
-- [ ] Hybrid scorer (SVD + content)
-- [ ] Cold start logic (declared interests)
-- [ ] Redis cache (get/set/invalidate)
-- [ ] GET /recommendations/{userId}
-- [ ] GET /recommendations/similar/{videoId}
-- [ ] GET /recommendations/cold/{categoryId}
+- [x] Project scaffold (Spring Boot, dependencies, application.properties)
+- [x] Kafka consumers for all topics
+- [x] Idempotency via processed_events
+- [x] Interactions table insert on every event
+- [x] Item factors update on video.uploaded and video.watched
+- [x] User category profile insert on user.events (registered)
+- [x] Handle user.events (prefs_updated, deactivated)
+- [x] Content-based engine (cosine similarity)
+- [x] Hybrid scorer (SVD + content)
+- [x] Cold start logic (declared interests)
+- [x] Redis cache (get/set/invalidate)
+- [x] GET /recommendations/{userId}
+- [x] GET /recommendations/similar/{videoId}
+- [x] GET /recommendations/cold/{categoryId}
 
 ---
 
@@ -98,4 +98,5 @@ org.vidrec.recommendationservice
 
 - Full SVD training is externalized to FastAPI sidecar (not wired in Java yet).
 - No batch backfill of item_factors for legacy videos.
-- DLQ handling not implemented yet.
+- DLQ handling implemented with `*.dlq` topic routing.
+- Personalized feed currently returns cold-start-by-user for new users and a content-based fallback for users with more interactions; SVD/hybrid scoring is not wired into the controller yet.

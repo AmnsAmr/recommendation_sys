@@ -54,13 +54,16 @@ public class ColdStartService {
 
         Map<String, Double> declaredWeightsByCategory = declaredProfiles.stream()
                 .collect(Collectors.toMap(
-                        UserCategoryProfile::getCategory,
+                        profile -> RecommendationCategoryMapper.normalize(profile.getCategory()),
                         profile -> profile.getWeight() == null ? 1.0 : profile.getWeight(),
                         Double::sum,
                         LinkedHashMap::new));
 
         Map<String, Double> categoryWeightByVideoId = new LinkedHashMap<>();
         for (Map.Entry<String, Double> declaredCategory : declaredWeightsByCategory.entrySet()) {
+            if (declaredCategory.getKey() == null || declaredCategory.getKey().isBlank()) {
+                continue;
+            }
             itemFactorRepository.findByCategoryId(declaredCategory.getKey()).forEach(itemFactor ->
                     categoryWeightByVideoId.merge(
                             itemFactor.getVideoId(),

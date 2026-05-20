@@ -84,10 +84,10 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         }
 
         String path = request.getRequestURI();
-        return "/videos/catalog".equals(path)
-            || "/videos/search".equals(path)
+        return path.startsWith("/videos/catalog")
+            || path.startsWith("/videos/search")
             || path.matches("^/videos/[^/]+$")
-            || path.matches("^/videos/user/[^/]+$");
+            || path.startsWith("/videos/user/");
     }
 
     private boolean isTrustedGatewayRequest(HttpServletRequest request) {

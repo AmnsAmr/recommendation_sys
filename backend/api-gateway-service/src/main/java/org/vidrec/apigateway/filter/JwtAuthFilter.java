@@ -150,20 +150,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String method = request.getMethod();
         String path = request.getRequestURI();
 
-        if ("POST".equalsIgnoreCase(method) && ("/users/register".equals(path) || "/users/login".equals(path))) {
-            return true;
+        if ("POST".equalsIgnoreCase(method)) {
+            return path.startsWith("/users/register") || path.startsWith("/users/login");
         }
 
         if ("GET".equalsIgnoreCase(method)) {
-            if ("/videos/catalog".equals(path) || "/videos/search".equals(path)) {
-                return true;
-            }
-            if (path.matches("^/videos/[^/]+$") || path.matches("^/videos/user/[^/]+$")) {
-                return true;
-            }
-            if (path.matches("^/recommendations/cold/[^/]+$") || path.matches("^/recommendations/similar/[^/]+$")) {
-                return true;
-            }
+            return path.startsWith("/videos/catalog")
+                || path.startsWith("/videos/search")
+                || path.matches("^/videos/[^/]+/?$")
+                || path.startsWith("/videos/user/")
+                || path.startsWith("/recommendations/cold/")
+                || path.startsWith("/recommendations/similar/");
         }
 
         return false;

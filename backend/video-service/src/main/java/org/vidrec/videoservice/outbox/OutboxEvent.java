@@ -13,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnTransformer;
 import lombok.Setter;
 
 @Entity
@@ -38,6 +39,7 @@ public class OutboxEvent {
     private String topic;
 
     @Column(columnDefinition = "jsonb", nullable = false)
+    @ColumnTransformer(read = "payload::text", write = "?::jsonb")
     private String payload;
 
     @Column(nullable = false)

@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
@@ -18,7 +19,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "interactions", schema = "recommendation_schema")
+@Table(name = "interactions", schema = "recommendation_schema",
+       indexes = {
+           @Index(name = "idx_interactions_user_id", columnList = "user_id"),
+           @Index(name = "idx_interactions_video_id", columnList = "video_id"),
+           @Index(name = "idx_interactions_user_video", columnList = "user_id, video_id")
+       })
 @Getter
 @Setter
 @NoArgsConstructor

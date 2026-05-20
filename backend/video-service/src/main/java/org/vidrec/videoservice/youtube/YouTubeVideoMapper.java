@@ -19,19 +19,22 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class YouTubeVideoMapper {
 
+    private static final int LEGACY_VARCHAR_LIMIT = 255;
+    private static final int LANGUAGE_LENGTH = 10;
+
     private final ObjectMapper objectMapper;
 
     public Video toEntity(YouTubeVideo source) {
         return Video.builder()
             .id(source.youtubeId())
-            .title(source.title())
-            .description(source.description())
-            .categoryId(source.localCategoryId())
+            .title(fit(source.title(), LEGACY_VARCHAR_LIMIT))
+            .description(fit(source.description(), LEGACY_VARCHAR_LIMIT))
+            .categoryId(fit(source.localCategoryId(), LEGACY_VARCHAR_LIMIT))
             .duration(source.durationSeconds())
             .source(VideoSource.YOUTUBE)
-            .youtubeId(source.youtubeId())
-            .thumbnailUrl(source.thumbnailUrl())
-            .language(source.defaultAudioLanguage())
+            .youtubeId(fit(source.youtubeId(), 100))
+            .thumbnailUrl(fit(source.thumbnailUrl(), LEGACY_VARCHAR_LIMIT))
+            .language(fit(source.defaultAudioLanguage(), LANGUAGE_LENGTH))
             .status(VideoStatus.READY)
             .viewCount(0L)
             .likeCount(0L)
@@ -43,13 +46,13 @@ public class YouTubeVideoMapper {
     public String toUploadedPayload(YouTubeVideo source) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("eventId", UUID.randomUUID().toString());
-        payload.put("videoId", source.youtubeId());
-        payload.put("title", source.title());
-        payload.put("description", source.description());
+        payload.put("videoId", fit(source.youtubeId(), 100));
+        payload.put("title", fit(source.title(), LEGACY_VARCHAR_LIMIT));
+        payload.put("description", fit(source.description(), LEGACY_VARCHAR_LIMIT));
         payload.put("tags", source.tags());
-        payload.put("categoryId", source.localCategoryId());
-        payload.put("thumbnailUrl", source.thumbnailUrl());
-        payload.put("language", source.defaultAudioLanguage());
+        payload.put("categoryId", fit(source.localCategoryId(), LEGACY_VARCHAR_LIMIT));
+        payload.put("thumbnailUrl", fit(source.thumbnailUrl(), LEGACY_VARCHAR_LIMIT));
+        payload.put("language", fit(source.defaultAudioLanguage(), LANGUAGE_LENGTH));
         payload.put("source", "youtube");
         payload.put("timestamp", Instant.now().toString());
         try {
@@ -58,5 +61,17 @@ public class YouTubeVideoMapper {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Failed to serialize video.uploaded payload", ex);
         }
+    }
+
+    private String fit(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        if (trimmed.length() <= maxLength) {
+            return trimmed;
+        }
+        return trimmed.substring(0, maxLength);
     }
 }

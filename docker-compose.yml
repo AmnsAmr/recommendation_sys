@@ -13,14 +13,23 @@ services:
       VIDEO_SERVICE_URL: http://video-service:8082
       REC_SERVICE_URL: http://recommendation-service:8083
       JWT_SECRET: ${JWT_SECRET}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
     depends_on:
-      - user-service
-      - video-service
-      - recommendation-service
+      user-service:
+        condition: service_healthy
+      video-service:
+        condition: service_healthy
+      recommendation-service:
+        condition: service_healthy
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   # User Service
   user-service:
@@ -43,11 +52,17 @@ services:
       KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
       SERVER_PORT: 8081
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -S -O - http://localhost:8081/actuator/health 2>&1 | grep -Eq 'HTTP/1.1 (200|403)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
 
   # Video Service
   video-service:
@@ -73,12 +88,20 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
+      YOUTUBE_SYNC_ENABLED: ${YOUTUBE_SYNC_ENABLED:-true}
+      YOUTUBE_SYNC_CATEGORY_MAPPINGS: ${YOUTUBE_SYNC_CATEGORY_MAPPINGS:-10:music,28:technology,20:gaming,27:education,24:entertainment}
       JWT_SECRET: ${JWT_SECRET}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
       SERVER_PORT: 8082
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -S -O - http://localhost:8082/actuator/health 2>&1 | grep -Eq 'HTTP/1.1 (200|503)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
 
   # Recommendation Service
   recommendation-service:
@@ -93,19 +116,32 @@ services:
       SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL}
       KAFKA_SASL_USERNAME: ${KAFKA_SASL_USERNAME}
       KAFKA_SASL_PASSWORD: ${KAFKA_SASL_PASSWORD}
+      KAFKA_SSL_KEYSTORE_LOCATION: /app/client.keystore.p12
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD}
+      KAFKA_SSL_KEY_PASSWORD: ${KAFKA_SSL_KEY_PASSWORD}
+      KAFKA_SSL_TRUSTSTORE_LOCATION: /app/client.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       SVD_SIDECAR_URL: ${SVD_SIDECAR_URL}
       JWT_SECRET: ${JWT_SECRET}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
       SERVER_PORT: 8083
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8083/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
 
   # SVD Python Sidecar (FastAPI)
   svd-sidecar:
@@ -123,6 +159,12 @@ services:
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; data = json.load(urllib.request.urlopen('http://localhost:8000/health')); raise SystemExit(0 if data.get('status') == 'ok' else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   # Frontend
   frontend:
@@ -135,10 +177,17 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - platform-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
   # Redis
   redis:
@@ -152,6 +201,12 @@ services:
       - platform-net
     restart: on-failure
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 
 volumes:
   redis-data:

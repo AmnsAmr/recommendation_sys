@@ -56,6 +56,10 @@ coverage/
 # Maven local repo
 .m2repo/
 
+# =========================
+# DATASETS
+# =========================
+backend/video-service/src/main/resources/data/
 
 target/
 *.log

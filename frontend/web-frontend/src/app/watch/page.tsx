@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
@@ -50,11 +50,13 @@ export default function WatchPage() {
       source: "own",
     };
   }, [search]);
-  const [currentVideo, setCurrentVideo] = useState<UiVideo>(requestedVideo);
+  const [resolvedVideos, setResolvedVideos] = useState<Record<string, UiVideo>>({});
+  const currentVideo = resolvedVideos[requestedVideo.id] ?? requestedVideo;
+  const shouldFetchVideo = requestedVideo.id !== requestedVideo.title;
+  const cachedVideo = resolvedVideos[requestedVideo.id];
 
   useEffect(() => {
-    setCurrentVideo(requestedVideo);
-    if (!requestedVideo.id || requestedVideo.id === requestedVideo.title) {
+    if (!requestedVideo.id || !shouldFetchVideo || cachedVideo) {
       return;
     }
 
@@ -62,19 +64,24 @@ export default function WatchPage() {
     api.getVideo(requestedVideo.id)
       .then((video) => {
         if (active) {
-          setCurrentVideo(fromApiVideo(video));
+          setResolvedVideos((current) => {
+            if (current[requestedVideo.id]) {
+              return current;
+            }
+
+            return {
+              ...current,
+              [requestedVideo.id]: fromApiVideo(video),
+            };
+          });
         }
       })
-      .catch(() => {
-        if (active) {
-          setCurrentVideo(requestedVideo);
-        }
-      });
+      .catch(() => undefined);
 
     return () => {
       active = false;
     };
-  }, [requestedVideo]);
+  }, [cachedVideo, requestedVideo.id, shouldFetchVideo]);
 
   return <WatchExperience key={currentVideo.id} currentVideo={currentVideo} />;
 }
@@ -89,10 +96,69 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
   const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const durationSeconds = currentVideo.durationSeconds || parseDuration(currentVideo.duration);
+  const durationSeconds = currentVideo?.durationSeconds || 0;
   const progressPct = Math.min((progress / Math.max(durationSeconds, 1)) * 100, 100);
+  const progressRef = useRef(0);
+  const [similarVideos, setSimilarVideos] = useState<UiVideo[]>([]);
+  const [similarLoading, setSimilarLoading] = useState(currentVideo.id !== currentVideo.title);
+  const fallbackVideos = useMemo(
+    () =>
+      videos
+        .filter((video) => video.title !== currentVideo.title)
+        .slice(0, 7)
+        .map((video) => ({
+          ...video,
+          id: video.title,
+          durationSeconds: parseDuration(video.duration),
+          source: "own" as const,
+        })),
+    [currentVideo.title],
+  );
+  const canFetchRecommendations = currentVideo.id !== currentVideo.title;
 
-  const sendWatchEvent = (watchDuration: number) => {
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
+  useEffect(() => {
+    if (!currentVideo.id || !canFetchRecommendations) {
+      return;
+    }
+
+    let active = true;
+    api.getSimilarVideos(currentVideo.id)
+      .then(async (res) => {
+        const similarIds = res.similarVideoIds
+          .filter((id) => id && id !== currentVideo.id)
+          .slice(0, 5);
+        if (!similarIds.length) {
+          if (active) {
+            setSimilarVideos([]);
+            setSimilarLoading(false);
+          }
+          return;
+        }
+
+        const promises = similarIds.map((id) => api.getVideo(id).catch(() => null));
+        const vids = await Promise.all(promises);
+        if (active) {
+          setSimilarVideos(vids.filter((video): video is Awaited<ReturnType<typeof api.getVideo>> => video !== null).map(fromApiVideo));
+          setSimilarLoading(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSimilarVideos([]);
+          setSimilarLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [canFetchRecommendations, currentVideo.id]);
+
+  const sendWatchEvent = useCallback((watchDuration: number) => {
     if (!getAuthToken() || !currentVideo.id) {
       return;
     }
@@ -104,7 +170,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
       completionPct: Math.min(watchDuration / Math.max(durationSeconds, 1), 1),
       source: currentVideo.source === "youtube" ? "youtube" : "own",
     }).catch(() => undefined);
-  };
+  }, [currentVideo.id, currentVideo.source, durationSeconds]);
 
   useEffect(() => {
     if (!playing) {
@@ -125,16 +191,27 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     }, 350);
 
     return () => window.clearInterval(interval);
-  }, [durationSeconds, playing]);
+  }, [durationSeconds, playing, sendWatchEvent]);
 
   useEffect(() => {
     if (!playing) {
       return;
     }
 
-    const heartbeat = window.setInterval(() => sendWatchEvent(progress), 30000);
+    const heartbeat = window.setInterval(() => sendWatchEvent(progressRef.current), 30000);
     return () => window.clearInterval(heartbeat);
-  }, [currentVideo.id, durationSeconds, playing, progress]);
+  }, [currentVideo.id, durationSeconds, playing, sendWatchEvent]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (progressRef.current > 0) {
+        sendWatchEvent(progressRef.current);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [currentVideo.id, durationSeconds, sendWatchEvent]);
 
   const triggerReaction = (value: string) => {
     setReaction(value);
@@ -151,7 +228,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
       });
     }
     if (playing) {
-      sendWatchEvent(progress);
+      sendWatchEvent(progressRef.current);
     }
     triggerReaction(playing ? "paused" : "playing");
   };
@@ -179,10 +256,14 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                   onPlay={() => setPlaying(true)}
                   onPause={() => {
                     setPlaying(false);
-                    sendWatchEvent(progress);
+                    sendWatchEvent(progressRef.current);
                   }}
                   onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
-                  onEnded={() => sendWatchEvent(durationSeconds)}
+                  onEnded={() => {
+                    setPlaying(false);
+                    setProgress(durationSeconds);
+                    sendWatchEvent(durationSeconds);
+                  }}
                 />
               ) : (
                 <>
@@ -369,9 +450,19 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="text-lg font-black text-slate-950">Up next</h2>
             <div className="mt-4 grid gap-3">
-              {videos.filter((video) => video.title !== currentVideo.title).slice(0, 7).map((video) => (
-                <VideoCard key={video.title} video={{ ...video, id: video.title, durationSeconds: parseDuration(video.duration), source: "own" }} compact />
-              ))}
+              {similarVideos.length > 0 ? (
+                similarVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} compact />
+                ))
+              ) : fallbackVideos.length > 0 ? (
+                fallbackVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} compact />
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {similarLoading ? "Loading recommendations..." : "No related videos yet."}
+                </p>
+              )}
             </div>
           </div>
         </aside>

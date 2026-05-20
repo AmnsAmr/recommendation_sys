@@ -32,7 +32,7 @@ public class Video {
     @Column(nullable = false, length = 500)
     private String title;
 
-    @Column
+    @Column(columnDefinition = "TEXT")
     private String description;
 
     @Column(name = "category_id", nullable = false)

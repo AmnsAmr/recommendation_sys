@@ -15,7 +15,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.vidrec.userservice.user.UserRole;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Component
 public class HeaderAuthFilter extends OncePerRequestFilter {
 
@@ -41,18 +43,24 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         return "/actuator/health".equals(path) || "/actuator/info".equals(path);
     }
 
+    private boolean isPublicPath(String path) {
+        if (path == null) return false;
+        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
         String path = request.getRequestURI();
 
         // Allow public paths to proceed without gateway token validation
-        if (PUBLIC_PATHS.contains(path)) {
+        if (isPublicPath(path)) {
             filterChain.doFilter(request, response);
             return;
         }
 
         if (!isTrustedGatewayRequest(request)) {
+            log.warn("Unauthorized request to protected path: {} (Missing or invalid X-Internal-Token)", path);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }

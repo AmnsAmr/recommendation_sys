@@ -50,25 +50,62 @@ function formatUploadedAt(value?: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function humanizeCategory(value?: string) {
+  if (!value) {
+    return "Video";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const known: Record<string, string> = {
+    "science-technology": "Science & Technology",
+    "howto-style": "How-to & Style",
+    "travel-events": "Travel & Events",
+    gaming: "Gaming",
+    education: "Education",
+    sports: "Sports",
+    music: "Music",
+    entertainment: "Entertainment",
+    news: "News",
+  };
+
+  if (known[normalized]) {
+    return known[normalized];
+  }
+
+  return normalized
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function fromApiVideo(video: ApiVideo): UiVideo {
-  const category = video.categoryId || video.tags?.[0] || "Video";
+  const youtubeId = video.youtubeId || (video.source === "youtube" ? video.videoId : undefined);
+  const category = humanizeCategory(video.categoryId || video.tags?.[0] || "Video");
   const durationSeconds = video.duration || 0;
+  const thumbnailUrl = video.thumbnailUrl || (youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined);
+  const creatorSeed = video.uploaderId?.slice(0, 8) || (youtubeId ? youtubeId.slice(0, 6) : "catalog");
+  const channel = video.uploaderId
+    ? `Creator ${video.uploaderId.slice(0, 8)}`
+    : video.source === "youtube"
+      ? `${category} Archive`
+      : "VideoRec";
 
   return {
     id: video.videoId,
     title: video.title,
-    creator: video.uploaderId?.slice(0, 8) || "creator",
-    channel: video.uploaderId ? `Creator ${video.uploaderId.slice(0, 8)}` : video.source === "youtube" ? "YouTube catalog" : "VideoRec",
+    creator: creatorSeed,
+    channel,
     views: formatViews(video.viewCount),
     uploadedAt: formatUploadedAt(video.createdAt),
     duration: formatDuration(durationSeconds),
     durationSeconds,
     category,
-    score: "Live",
+    score: video.source === "youtube" ? "Seeded" : "Live",
     poster: category.toLowerCase(),
-    thumbnailUrl: video.thumbnailUrl,
+    thumbnailUrl,
     source: video.source || "own",
-    youtubeId: video.youtubeId,
+    youtubeId,
     url: video.url,
     description: video.description || "No description available.",
   };
