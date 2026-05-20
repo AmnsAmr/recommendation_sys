@@ -32,6 +32,20 @@ function parseDuration(duration: string) {
   return minutes * 60 + seconds;
 }
 
+function readRememberedVideo(id: string): UiVideo | null {
+  try {
+    const raw = window.localStorage.getItem("videorec-current-video");
+    if (!raw) {
+      return null;
+    }
+
+    const video = JSON.parse(raw) as UiVideo;
+    return video.id === id ? video : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatTime(value: number) {
   const minutes = Math.floor(value / 60);
   const seconds = Math.floor(value % 60);
@@ -42,6 +56,13 @@ export default function WatchPage() {
   const search = useSyncExternalStore(subscribeToUrlChange, readSearch, () => "");
   const requestedVideo = useMemo(() => {
     const value = new URLSearchParams(search).get("video");
+    if (value) {
+      const remembered = readRememberedVideo(value);
+      if (remembered) {
+        return remembered;
+      }
+    }
+
     const fallback = videos.find((video) => video.title === value) || videos[0];
     return {
       ...fallback,

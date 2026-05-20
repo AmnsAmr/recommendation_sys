@@ -158,6 +158,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if ("/videos/catalog".equals(path) || "/videos/search".equals(path)) {
                 return true;
             }
+            if ("/videos/youtube/search".equals(path)) {
+                return true;
+            }
             if (path.matches("^/videos/[^/]+$") || path.matches("^/videos/user/[^/]+$")) {
                 return true;
             }

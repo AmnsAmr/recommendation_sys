@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { api } from "@/lib/api";
 import { categories, videos } from "@/lib/mock-data";
-import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
+import { fromApiVideo, fromYouTubeVideo, type UiVideo } from "@/lib/video-mapper";
+import { getFallbackYouTubeVideos } from "@/lib/youtube-fallback";
 
 export default function HomepagePage() {
   return (
@@ -36,18 +37,36 @@ function HomepageContent() {
     setLoading(true);
     setNotice("");
 
-    const request = query ? api.searchVideos(query) : api.getCatalog({ categoryId: active === "For you" ? undefined : active });
+    const youtubeQuery = query || (active === "For you" ? "technology music education" : active);
+    const request = api.searchYouTubeVideos(youtubeQuery, 12);
 
     request
       .then((response) => {
         if (activeRequest) {
-          setRemoteVideos(response.videos.map(fromApiVideo));
+          const youtubeVideos = response.videos.map(fromYouTubeVideo);
+          if (youtubeVideos.length > 0) {
+            setRemoteVideos(youtubeVideos);
+            return;
+          }
+
+          api.getCatalog({ categoryId: active === "For you" ? undefined : active })
+            .then((catalog) => {
+              if (activeRequest) {
+                setRemoteVideos(catalog.videos.map(fromApiVideo));
+              }
+            })
+            .catch(() => {
+              if (activeRequest) {
+                setRemoteVideos(getFallbackYouTubeVideos());
+                setNotice("Backend unavailable, showing embedded YouTube demo videos.");
+              }
+            });
         }
       })
       .catch(() => {
         if (activeRequest) {
-          setRemoteVideos([]);
-          setNotice("Backend unavailable, showing local sample videos.");
+          setRemoteVideos(getFallbackYouTubeVideos());
+          setNotice("YouTube API unavailable, showing embedded YouTube demo videos.");
         }
       })
       .finally(() => {

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { VideoPoster } from "@/components/video-poster";
 import type { UiVideo } from "@/lib/video-mapper";
@@ -7,9 +9,13 @@ function videoHref(video: UiVideo) {
 }
 
 export function VideoCard({ video, compact = false }: { video: UiVideo; compact?: boolean }) {
+  const rememberVideo = () => {
+    window.localStorage.setItem("videorec-current-video", JSON.stringify(video));
+  };
+
   if (compact) {
     return (
-      <Link href={videoHref(video)} className="group grid grid-cols-[150px_1fr] gap-3 rounded-xl p-1 transition hover:bg-slate-100 active:scale-[0.99]">
+      <Link onClick={rememberVideo} href={videoHref(video)} className="group grid grid-cols-[150px_1fr] gap-3 rounded-xl p-1 transition hover:bg-slate-100 active:scale-[0.99]">
         {video.thumbnailUrl ? (
           <img src={video.thumbnailUrl} alt="" className="aspect-video rounded-xl object-cover" />
         ) : (
@@ -29,7 +35,7 @@ export function VideoCard({ video, compact = false }: { video: UiVideo; compact?
   }
 
   return (
-    <Link href={videoHref(video)} className="group block rounded-xl bg-transparent transition hover:-translate-y-1">
+    <Link onClick={rememberVideo} href={videoHref(video)} className="group block rounded-xl bg-transparent transition hover:-translate-y-1">
       {video.thumbnailUrl ? (
         <div className="relative overflow-hidden rounded-xl">
           <img src={video.thumbnailUrl} alt="" className="aspect-video w-full object-cover transition group-hover:scale-[1.02]" />

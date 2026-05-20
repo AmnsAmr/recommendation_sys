@@ -36,6 +36,7 @@ public class RouteConfig {
         RouterFunction<?> videoRoutes = route("video-service-public")
             .GET("/videos/catalog", http())
             .GET("/videos/search", http())
+            .GET("/videos/youtube/search", http())
             .GET("/videos/user/{userId}", http())
             .GET("/videos/{videoId}", http())
             .before(uri(videoServiceUrl))

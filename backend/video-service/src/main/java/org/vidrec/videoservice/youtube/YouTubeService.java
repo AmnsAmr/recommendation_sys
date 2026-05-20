@@ -35,6 +35,34 @@ public class YouTubeService {
         return fetchVideoDetails(ids, localCategoryId);
     }
 
+    public List<YouTubeVideo> searchVideos(String query, int maxResults) {
+        List<String> ids = searchVideoIdsByQuery(query, maxResults);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return fetchVideoDetails(ids, "YouTube");
+    }
+
+    private List<String> searchVideoIdsByQuery(String query, int maxResults) {
+        String body = callApi("/search", uri -> uri
+            .queryParam("part", "snippet")
+            .queryParam("type", "video")
+            .queryParam("q", query)
+            .queryParam("regionCode", properties.sync().regionCode())
+            .queryParam("maxResults", Math.max(1, Math.min(maxResults, 25)))
+            .queryParam("key", properties.apiKey()));
+
+        JsonNode root = parse(body);
+        List<String> ids = new ArrayList<>();
+        for (JsonNode item : root.path("items")) {
+            String id = item.path("id").path("videoId").asText("");
+            if (!id.isEmpty()) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
     private List<String> searchVideoIds(String youtubeCategoryId) {
         String body = callApi("/search", uri -> uri
             .queryParam("part", "snippet")

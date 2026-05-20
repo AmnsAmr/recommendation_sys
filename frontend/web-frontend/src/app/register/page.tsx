@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
-import { api, setAuthToken } from "@/lib/api";
+import { api, clearAuthToken, setAuthToken } from "@/lib/api";
 import { emitAuthChange } from "@/lib/auth";
 import { categories } from "@/lib/mock-data";
 
@@ -75,6 +75,25 @@ export default function RegisterPage() {
       emitAuthChange();
       router.push(response.role.toLowerCase() === "admin" ? "/admin/dashboard" : "/homepage");
     } catch (error) {
+      if (error instanceof TypeError || (error instanceof Error && error.message === "Failed to fetch")) {
+        const username = (displayName.trim() || email.split("@")[0]).replace(/[^a-zA-Z0-9_]/g, "_");
+        clearAuthToken();
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            userId: `local-${Date.now()}`,
+            email,
+            role: "USER",
+            username,
+            displayName: displayName.trim(),
+            interests: selected,
+          }),
+        );
+        emitAuthChange();
+        router.push("/homepage");
+        return;
+      }
+
       setError(error instanceof Error ? error.message : "Unable to create account.");
     } finally {
       setLoading(false);
@@ -183,7 +202,7 @@ export default function RegisterPage() {
                             : "border-slate-200 bg-white text-slate-700 hover:border-teal-300"
                         }`}
                       >
-                        {active ? "✓ " : "+ "}
+                        {active ? "v " : "+ "}
                         {interest}
                       </button>
                     );
