@@ -46,6 +46,19 @@ Primary references:
 
 ---
 
+## Current State at a Glance
+
+| Service | Built | Gaps |
+|---|---|---|
+| api-gateway-service | Routes, JWT validation, X-User-Id / X-User-Role / X-Internal-Token forwarding | rate limiting, mTLS |
+| user-service | Register / login / profile / preferences, admin moderation, admin bootstrap, `user.events` producer (after-commit) | no HTTP route exposes `deactivateUser`; no email verification / refresh token |
+| video-service | Upload (init + R2 + duration probe), catalog / search / watch / like / search-click, admin moderation, YouTube sync, transactional outbox, all 4 video topics | outbox has no retry counter / DLQ; no signed R2 URLs |
+| recommendation-service | Entities + repos, header-auth security, content engine (`ContentBasedService` + `ContentVectorizer`), `ItemFactorService`, `UserCategoryProfileService`, `ColdStartService` (by category and by user), `SimilarVideoService`, `RecommendationController` exposing `/similar/{videoId}` and `/cold/{categoryId}` | **no Kafka consumers / DLQ, no Redis cache, no hybrid scorer, no SVD client, no `/recommendations/{userId}` endpoint, no `shared/exception/` envelope** |
+| svd-sidecar | FastAPI scaffold (`/health`, stubbed `/train`, `/predict`) | real SVD training/inference, `/predict/batch`, DB I/O, factor reload |
+| frontend | Page shells + admin shells, real `lib/api.ts` client wired to gateway, real `POST /users/login` / `register` + JWT under `localStorage.auth_token`, catalog/search/video/upload calls plumbed | watch heartbeat + like/dislike + search-click tracking not wired; admin pages still partly on mock data; no hooks layer; duplicate top-level admin shells |
+
+---
+
 ## How to Navigate This Codebase as an Agent
 
 ### Step 1 -- Identify which service you need to touch
@@ -165,7 +178,9 @@ video_outbox(id UUID PK, aggregate_type VARCHAR, aggregate_id VARCHAR,
 interactions(id UUID PK, user_id UUID, video_id VARCHAR,
        event_type ENUM(watch,like,dislike,search_click,rewatch),
        score FLOAT, completion_pct FLOAT, created_at TIMESTAMP)
-user_factors(user_id UUID PK, vector FLOAT[], updated_at TIMESTAMP)
+user_factors(user_id UUID PK, vector FLOAT[],
+       interaction_count INTEGER NOT NULL DEFAULT 0,
+       last_trained_at TIMESTAMP NULL, updated_at TIMESTAMP)
 item_factors(video_id VARCHAR PK, vector FLOAT[], tags TEXT[],
        category_id VARCHAR, thumbnail_url VARCHAR, language VARCHAR(10),
        view_count BIGINT, global_score FLOAT, updated_at TIMESTAMP)
@@ -206,40 +221,50 @@ SVD_SIDECAR_URL=http://svd-sidecar:8000
 ### User Service (via gateway: /users/**)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/users/register` | None | Create account (emits user.registered) |
-| POST | `/users/login` | None | Returns JWT |
-| GET | `/users/{id}/profile` | JWT | Get profile |
-| PUT | `/users/{id}/preferences` | JWT | Update category preferences |
-| PUT | `/users/{id}/profile` | JWT | Update profile fields |
+| POST | `/users/register` | None | Create account, emits `user.events` type=`registered` |
+| POST | `/users/login` | None | Returns JWT; 403 ACCOUNT_BANNED / ACCOUNT_INACTIVE if not active |
+| GET | `/users/{id}/profile` | JWT (self) | Get profile; 403 if JWT subject != path id |
+| PUT | `/users/{id}/profile` | JWT (self) | Partial update of display name / bio / picture |
+| PUT | `/users/{id}/preferences` | JWT (self) | Replace preferences; emits `prefs_updated` |
 | GET | `/admin/users/dashboard` | Admin JWT | User/admin dashboard metrics |
-| GET | `/admin/users` | Admin JWT | List users for moderation |
-| PUT | `/admin/users/{id}/ban` | Admin JWT | Ban a user (emits user.events type=banned) |
-| PUT | `/admin/users/{id}/unban` | Admin JWT | Reinstate a banned user (emits user.events type=reinstated) |
-| DELETE | `/admin/users/{id}` | Admin JWT | Delete a user |
+| GET | `/admin/users` | Admin JWT | List users for moderation (`page`, `size`, `active?`, `role?`) |
+| GET | `/admin/users/{id}` | Admin JWT | Full user detail incl. preferences |
+| PUT | `/admin/users/{id}` | Admin JWT | Edit display/bio/picture/role; admin cannot demote self |
+| PUT | `/admin/users/{id}/ban` | Admin JWT | Ban a user, emits `banned`; admin cannot ban self |
+| PUT | `/admin/users/{id}/unban` | Admin JWT | Reinstate a banned user, emits `reinstated` |
+| DELETE | `/admin/users/{id}` | Admin JWT | Delete a user, emits `deleted`; admin cannot delete self |
 
 ### Video Service (via gateway: /videos/**)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/videos/init` | JWT | Init upload, returns videoId + token |
-| PUT | `/videos/{id}/upload` | JWT | Upload file (multipart), leaves video under review |
-| GET | `/videos/{id}` | None | Get video metadata |
-| GET | `/videos/user/{userId}` | None | Get all videos by uploader |
-| GET | `/videos/search` | None | Search by keyword |
-| GET | `/videos/catalog` | None | Full catalog browse (supports language filter) |
-| POST | `/videos/watch` | JWT | Record watch event |
-| POST | `/videos/{id}/like` | JWT | Like or dislike |
-| POST | `/videos/search/click` | JWT | Search click tracking |
+| POST | `/videos/init` | JWT | Init upload, returns videoId + uploadToken + expiresAt |
+| PUT | `/videos/{id}/upload` | JWT + `X-Upload-Token` | Upload multipart file (mp4/mov, <=500 MB), status -> UNDER_REVIEW |
+| GET | `/videos/{id}` | None | Get video metadata (READY only) |
+| GET | `/videos/user/{userId}` | None | Get all READY videos by uploader (paginated) |
+| GET | `/videos/search?q=` | None | Search by keyword over title + tags |
+| GET | `/videos/catalog` | None | Full catalog browse (supports `categoryId`, `source`, `language`) |
+| POST | `/videos/watch` | JWT | Record watch event (inserts WatchSession + outbox `video.watched`) |
+| POST | `/videos/{id}/like` | JWT | Like or dislike (`{action}`) -- outbox `video.liked` |
+| POST | `/videos/search/click` | JWT | Search click tracking -- outbox `user.searched` |
 | GET | `/admin/videos/dashboard` | Admin JWT | Video moderation dashboard metrics |
-| GET | `/admin/videos/pending` | Admin JWT | Review queue |
-| POST | `/admin/videos/{id}/approve` | Admin JWT | Make uploaded video public |
-| POST | `/admin/videos/{id}/reject` | Admin JWT | Reject uploaded video |
+| GET | `/admin/videos/pending` | Admin JWT | UNDER_REVIEW queue |
+| GET | `/admin/videos/{id}` | Admin JWT | Full moderation detail |
+| PUT | `/admin/videos/{id}` | Admin JWT | Edit title/description/category/language (OWN only) |
+| POST | `/admin/videos/{id}/approve` | Admin JWT | UNDER_REVIEW -> READY, emits `video.uploaded` |
+| POST | `/admin/videos/{id}/reject` | Admin JWT | UNDER_REVIEW -> REJECTED |
+| DELETE | `/admin/videos/{id}` | Admin JWT | OWN only; cleans tags / watch sessions / outbox / R2 object |
 
 ### Recommendation Service (via gateway: /recommendations/**)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/recommendations/{userId}` | JWT | Personalized feed (cached) |
-| GET | `/recommendations/similar/{videoId}` | None | Similar videos |
-| GET | `/recommendations/cold/{categoryId}` | None | Cold start by category |
+| GET | `/recommendations/{userId}` | JWT | Personalized feed (cached) -- **not yet implemented** (Person C: hybrid scorer + SVD client + Redis cache) |
+| GET | `/recommendations/similar/{videoId}` | None | Similar videos via content cosine -- **implemented** |
+| GET | `/recommendations/cold/{categoryId}` | None | Cold start by category, ranked by `global_score` -- **implemented** |
+
+> The recommendation-service has the content engine, cold-start (by category and by user) and similar-video
+> path wired through `RecommendationController`. Still missing: Kafka consumers + DLQ, idempotency gate,
+> Redis cache, hybrid scorer, SVD sidecar client, and the JWT-protected `/recommendations/{userId}` endpoint.
+> See `backend/recommendation-service/AGENT.md` for the current gap list.
 
 ---
 
