@@ -138,3 +138,18 @@ export type AdminVideoDashboardResponse = {
   uploadsLast7Days: number;
   totalViews: number;
 };
+
+export type YouTubeVideo = {
+  youtubeId: string;
+  title: string;
+  description?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
+  defaultAudioLanguage?: string;
+  tags?: string[];
+  localCategoryId?: string;
+};
+
+export type YouTubeSearchResponse = {
+  videos: YouTubeVideo[];
+};

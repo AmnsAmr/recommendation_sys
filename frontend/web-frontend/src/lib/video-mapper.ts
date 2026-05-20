@@ -1,4 +1,4 @@
-import type { ApiVideo } from "@/lib/types";
+import type { ApiVideo, YouTubeVideo } from "@/lib/types";
 
 export type UiVideo = {
   id: string;
@@ -108,5 +108,28 @@ export function fromApiVideo(video: ApiVideo): UiVideo {
     youtubeId,
     url: video.url,
     description: video.description || "No description available.",
+  };
+}
+
+export function fromYouTubeVideo(video: YouTubeVideo): UiVideo {
+  const category = humanizeCategory(video.localCategoryId || video.tags?.[0] || "YouTube");
+  const durationSeconds = video.durationSeconds || 0;
+
+  return {
+    id: video.youtubeId,
+    title: video.title,
+    creator: "YouTube",
+    channel: "YouTube",
+    views: "YouTube",
+    uploadedAt: "Live",
+    duration: formatDuration(durationSeconds),
+    durationSeconds,
+    category,
+    score: "YouTube",
+    poster: "youtube",
+    thumbnailUrl: video.thumbnailUrl || `https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`,
+    source: "youtube",
+    youtubeId: video.youtubeId,
+    description: video.description || "YouTube video.",
   };
 }

@@ -11,6 +11,7 @@ import type {
   UserProfile,
   VideoListResponse,
   VideoUploadInitResponse,
+  YouTubeSearchResponse,
 } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -114,6 +115,11 @@ export const api = {
   searchVideos(query: string) {
     const search = new URLSearchParams({ q: query, page: "0", size: "24" });
     return apiRequest<VideoListResponse>(`/videos/search?${search.toString()}`, { auth: false });
+  },
+
+  searchYouTubeVideos(query: string, maxResults = 12) {
+    const search = new URLSearchParams({ q: query, maxResults: String(maxResults) });
+    return apiRequest<YouTubeSearchResponse>(`/videos/youtube/search?${search.toString()}`, { auth: false });
   },
 
   getVideo(videoId: string) {

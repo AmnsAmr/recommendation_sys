@@ -157,6 +157,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if ("GET".equalsIgnoreCase(method)) {
             return path.startsWith("/videos/catalog")
                 || path.startsWith("/videos/search")
+                || path.startsWith("/videos/youtube/search")
                 || path.matches("^/videos/[^/]+/?$")
                 || path.startsWith("/videos/user/")
                 || path.startsWith("/recommendations/cold/")
