@@ -26,8 +26,8 @@ dashboard metrics.
 - [x] Admin self-protection: cannot ban / delete / demote own account
 - [x] Admin bootstrap: `AdminBootstrapRunner` seeds an admin on startup when `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars are set
 - [x] Password hashing (BCrypt) + JWT utility (HS256, role claim included)
-- [x] `HeaderAuthFilter` -- accepts requests only if `X-Internal-Token` matches `INTERNAL_SERVICE_TOKEN`
-- [x] Spring Security: `/users/register`, `/users/login`, actuator open; `/admin/**` requires `ROLE_ADMIN`; everything else authenticated
+- [x] `HeaderAuthFilter` -- accepts requests only if `X-Internal-Token` matches `INTERNAL_SERVICE_TOKEN` (or synthesizes auth when `APP_SECURITY_DISABLED=true` for local test mode)
+- [x] Spring Security: `/users/register`, `/users/login`, actuator open; `/admin/**` requires `ROLE_ADMIN`; everything else authenticated unless `APP_SECURITY_DISABLED=true`
 - [x] Kafka producer (`UserEventPublisher`) -- publishes after DB commit via `TransactionSynchronization.afterCommit`
 - [x] Global exception handling (`ApiException` -> `ErrorResponse` envelope)
 
@@ -115,6 +115,7 @@ org.vidrec.userservice
 7. Admin self-protection: ban / delete / role demotion of own account is rejected with 403.
 8. `HeaderAuthFilter` rejects any request not carrying the matching `X-Internal-Token`, so the
    service is unreachable except via the gateway.
+   In local test mode (`APP_SECURITY_DISABLED=true`), it instead seeds a synthetic auth context so direct service calls still work.
 
 ---
 

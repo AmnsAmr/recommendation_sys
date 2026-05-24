@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { api } from "@/lib/api";
+import {
+  defaultUploadCategoryId,
+  uploadCategoryOptions,
+} from "@/lib/video-categories";
 
 export default function UploadPage() {
   const [title, setTitle] = useState("");
-  const [categoryId, setCategoryId] = useState("Backend");
+  const [categoryId, setCategoryId] = useState(defaultUploadCategoryId);
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
   const [language, setLanguage] = useState("en");
@@ -55,7 +59,7 @@ export default function UploadPage() {
 
           <label className="mt-6 block rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
             <span className="block text-lg font-black text-slate-950">{file ? file.name : "Drop video file here"}</span>
-            <span className="mt-2 block text-sm text-slate-500">MP4, WebM, or MOV up to 500 MB</span>
+            <span className="mt-2 block text-sm text-slate-500">MP4 or MOV up to 500 MB</span>
             <span className="mt-5 inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white">Browse file</span>
             <input type="file" accept="video/*" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] || null)} />
           </label>
@@ -68,11 +72,11 @@ export default function UploadPage() {
             <label className="block">
               <span className="text-sm font-semibold text-slate-700">Category</span>
               <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="field mt-2 h-12 px-4">
-                <option>Backend</option>
-                <option>AI</option>
-                <option>Data</option>
-                <option>DevOps</option>
-                <option>Design</option>
+                {uploadCategoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.label}
+                  </option>
+                ))}
               </select>
             </label>
           </div>

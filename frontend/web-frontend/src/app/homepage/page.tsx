@@ -5,28 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { api, getAuthToken } from "@/lib/api";
-import { categories } from "@/lib/mock-data";
 import type { UiVideo } from "@/lib/video-mapper";
 import { fromApiVideo } from "@/lib/video-mapper";
 import type { UserPreference } from "@/lib/types";
-
-const CATEGORY_TO_BACKEND_CATEGORY: Record<string, string> = {
-  Fashion: "howto-style",
-  Music: "music",
-  Sport: "sports",
-  Food: "howto-style",
-  Travel: "travel-events",
-  Gaming: "gaming",
-  Backend: "science-technology",
-  Frontend: "science-technology",
-  AI: "science-technology",
-  Data: "science-technology",
-  DevOps: "science-technology",
-  Design: "howto-style",
-  Education: "education",
-};
-
-const DEFAULT_FOR_YOU_CATEGORY = "science-technology";
+import {
+  forYouCategoryLabel,
+  formatVideoCategoryLabel,
+  homepageCategories as categories,
+  resolveVideoCategoryId,
+} from "@/lib/video-categories";
 
 type FeedSection = {
   id: string;
@@ -51,41 +38,32 @@ function unique<T>(values: T[]) {
   return Array.from(new Set(values));
 }
 
-function toBackendCategory(label: string) {
-  return CATEGORY_TO_BACKEND_CATEGORY[label] ?? label.toLowerCase().replace(" & ", "-").replace(" ", "-");
-}
-
-function toSectionTitle(labels: string[], backendCategoryId: string) {
-  if (labels.length === 0) {
-    return backendCategoryId
-      .split("-")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
+function noticeForStrategy(strategy?: string) {
+  const normalized = strategy?.trim().toLowerCase();
+  if (normalized?.startsWith("hybrid")) {
+    return "Recommendations tuned from your recent activity.";
   }
 
-  return labels.join(" / ");
+  return "Recommendations based on the interests you picked when creating your account.";
 }
 
 function buildInterestGroups(preferences: UserPreference[]) {
-  const grouped = new Map<string, string[]>();
+  const grouped = new Map<string, string>();
 
   preferences.forEach((preference) => {
-    const label = preference.category?.trim();
-    if (!label) {
+    const backendCategoryId = resolveVideoCategoryId(preference.category);
+    if (!backendCategoryId) {
       return;
     }
 
-    const backendCategoryId = toBackendCategory(label);
-    const current = grouped.get(backendCategoryId) ?? [];
-    if (!current.includes(label)) {
-      current.push(label);
-      grouped.set(backendCategoryId, current);
+    if (!grouped.has(backendCategoryId)) {
+      grouped.set(backendCategoryId, formatVideoCategoryLabel(backendCategoryId));
     }
   });
 
-  return Array.from(grouped.entries()).map(([backendCategoryId, labels]) => ({
+  return Array.from(grouped.entries()).map(([backendCategoryId, title]) => ({
     backendCategoryId,
-    title: toSectionTitle(labels, backendCategoryId),
+    title,
   }));
 }
 
@@ -105,7 +83,7 @@ function HomepageContent() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const routeGenre = searchParams.get("genre");
-  const active = selectedCategory ?? (routeGenre && categories.includes(routeGenre) ? routeGenre : "For you");
+  const active = selectedCategory ?? (routeGenre && categories.includes(routeGenre) ? routeGenre : forYouCategoryLabel);
   const query = searchParams.get("q")?.trim() || "";
 
   useEffect(() => {
@@ -121,36 +99,44 @@ function HomepageContent() {
       return videos.filter((video): video is Awaited<ReturnType<typeof api.getVideo>> => video !== null);
     };
 
-    const fetchSection = async (title: string, categoryId: string, preferred: boolean): Promise<FeedSection | null> => {
-      try {
-        const coldStart = await api.getColdStartRecommendations(categoryId);
-        const coldVideos = await fetchVideosByIds((coldStart.videoIds || []).slice(0, 8));
+    const fetchSection = async (
+      title: string,
+      categoryId: string | null,
+      preferred: boolean,
+    ): Promise<FeedSection | null> => {
+      if (categoryId) {
+        try {
+          const coldStart = await api.getColdStartRecommendations(categoryId);
+          const coldVideos = await fetchVideosByIds((coldStart.videoIds || []).slice(0, 8));
 
-        if (coldVideos.length > 0) {
-          return {
-            id: categoryId,
-            title,
-            subtitle: preferred
-              ? `Because you picked ${title} when you created your account.`
-              : `Showing ${title} videos from the cold-start feed.`,
-            videos: coldVideos.map(fromApiVideo),
-          };
+          if (coldVideos.length > 0) {
+            return {
+              id: categoryId,
+              title,
+              subtitle: preferred
+                ? `Because you picked ${title} when you created your account.`
+                : `Showing ${title} videos from the cold-start feed.`,
+              videos: coldVideos.map(fromApiVideo),
+            };
+          }
+        } catch {
+          // Fall through to catalog seed when cold-start is still warming up.
         }
-      } catch {
-        // Fall through to catalog seed when cold-start is still warming up.
       }
 
-      const fallback = await api.getCatalog({ categoryId, size: 8 });
+      const fallback = await api.getCatalog({ categoryId: categoryId ?? undefined, size: 8 });
       if ((fallback.videos || []).length === 0) {
         return null;
       }
 
       return {
-        id: `${categoryId}-catalog`,
+        id: `${categoryId ?? "catalog"}-catalog`,
         title,
-        subtitle: preferred
+        subtitle: preferred && categoryId
           ? `Seeded ${title} videos while recommendations warm up.`
-          : `Showing seeded ${title} videos from the catalog.`,
+          : categoryId
+            ? `Showing seeded ${title} videos from the catalog.`
+            : "Showing videos from the seeded catalog while recommendations warm up.",
         videos: fallback.videos.map(fromApiVideo),
       };
     };
@@ -171,10 +157,21 @@ function HomepageContent() {
       const token = getAuthToken();
       const userJson = localStorage.getItem("user");
 
-      if (active === "For you" && token && userJson) {
+      if (active === forYouCategoryLabel && token && userJson) {
         try {
           const user = JSON.parse(userJson) as { userId?: string };
           if (user.userId) {
+            const personalized = await api.getPersonalizedRecommendations(user.userId);
+            const personalizedVideos = await fetchVideosByIds((personalized.videoIds || []).slice(0, 24));
+
+            if (personalizedVideos.length > 0) {
+              return {
+                mode: "grid",
+                videos: personalizedVideos.map(fromApiVideo),
+                notice: noticeForStrategy(personalized.strategy),
+              };
+            }
+
             const profile = await api.getProfile(user.userId);
             const groups = buildInterestGroups(profile.preferences || []).slice(0, 4);
 
@@ -197,8 +194,8 @@ function HomepageContent() {
         }
       }
 
-      const categoryId = active === "For you" ? DEFAULT_FOR_YOU_CATEGORY : toBackendCategory(active);
-      const section = await fetchSection(active === "For you" ? "For you" : active, categoryId, active === "For you");
+      const categoryId = active === forYouCategoryLabel ? null : resolveVideoCategoryId(active);
+      const section = await fetchSection(active, categoryId, active === forYouCategoryLabel);
 
       if (section) {
         return {
@@ -248,7 +245,7 @@ function HomepageContent() {
     };
   }, [active, query]);
 
-  const showInterestSections = active === "For you" && !query && feedSections.length > 0;
+  const showInterestSections = active === forYouCategoryLabel && !query && feedSections.length > 0;
 
   return (
     <AppShell>
@@ -273,7 +270,7 @@ function HomepageContent() {
       <section className="mt-5">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-black text-slate-950">{query ? `Search: ${query}` : active === "For you" ? "Recommended" : active}</h1>
+            <h1 className="text-2xl font-black text-slate-950">{query ? `Search: ${query}` : active === forYouCategoryLabel ? "Recommended" : active}</h1>
             <p className="mt-1 text-sm text-slate-500">{loading ? "Loading from backend..." : notice || "Recommendations from your interests and activity."}</p>
           </div>
         </div>

@@ -6,12 +6,12 @@ import { VideoCard } from "@/components/video-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { videos } from "@/lib/mock-data";
+import { formatVideoCategoryLabel } from "@/lib/video-categories";
 import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
-
-const interests = ["Backend", "AI", "Data"];
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const [interests, setInterests] = useState<string[]>([]);
   const [uploads, setUploads] = useState<UiVideo[]>(
     videos.slice(0, 4).map((video) => ({
       ...video,
@@ -28,6 +28,10 @@ export default function ProfilePage() {
 
     api.getUserVideos(user.userId)
       .then((response) => setUploads(response.videos.map(fromApiVideo)))
+      .catch(() => undefined);
+
+    api.getProfile(user.userId)
+      .then((profile) => setInterests(profile.preferences.map((preference) => formatVideoCategoryLabel(preference.category))))
       .catch(() => undefined);
   }, [user?.userId]);
 
@@ -68,6 +72,11 @@ export default function ProfilePage() {
                   {interest}
                 </span>
               ))}
+              {interests.length === 0 ? (
+                <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-500">
+                  No interests saved yet.
+                </span>
+              ) : null}
             </div>
           </div>
         </aside>
@@ -84,7 +93,7 @@ export default function ProfilePage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {uploads.map((video) => (
-              <VideoCard key={video.title} video={video} />
+              <VideoCard key={video.id} video={video} />
             ))}
           </div>
         </section>

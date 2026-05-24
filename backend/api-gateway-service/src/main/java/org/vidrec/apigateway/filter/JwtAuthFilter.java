@@ -36,13 +36,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final SecretKey jwtKey;
     private final String internalServiceToken;
+    private final boolean securityDisabled;
+    private final String testUserId;
+    private final String testUserRole;
 
     public JwtAuthFilter(
         @Value("${JWT_SECRET}") String jwtSecret,
-        @Value("${INTERNAL_SERVICE_TOKEN}") String internalServiceToken
+        @Value("${INTERNAL_SERVICE_TOKEN}") String internalServiceToken,
+        @Value("${app.security.disabled:true}") boolean securityDisabled,
+        @Value("${app.security.test-user-id:00000000-0000-0000-0000-000000000001}") String testUserId,
+        @Value("${app.security.test-role:ADMIN}") String testUserRole
     ) {
         this.jwtKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         this.internalServiceToken = internalServiceToken;
+        this.securityDisabled = securityDisabled;
+        this.testUserId = testUserId;
+        this.testUserRole = StringUtils.hasText(testUserRole) ? testUserRole.toUpperCase() : "ADMIN";
     }
 
     @Override
@@ -59,6 +68,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if (!isGatewayManagedPath(path)) {
             filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (securityDisabled) {
+            // FIXME(RULES.md §4): test mode bypasses gateway JWT enforcement so the stack is easier to exercise locally.
+            filterChain.doFilter(
+                mutateRequest(request, resolveForwardedUserId(request), resolveForwardedUserRole(request)),
+                response
+            );
             return;
         }
 
@@ -128,6 +146,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = authorization.substring(BEARER_PREFIX.length()).trim();
         return StringUtils.hasText(token) ? token : null;
+    }
+
+    private String resolveForwardedUserId(HttpServletRequest request) {
+        String forwardedUserId = request.getHeader(USER_ID_HEADER);
+        return StringUtils.hasText(forwardedUserId) ? forwardedUserId : testUserId;
+    }
+
+    private String resolveForwardedUserRole(HttpServletRequest request) {
+        String forwardedUserRole = request.getHeader(USER_ROLE_HEADER);
+        return StringUtils.hasText(forwardedUserRole) ? forwardedUserRole.toUpperCase() : testUserRole;
     }
 
     private boolean isGatewayManagedPath(String path) {

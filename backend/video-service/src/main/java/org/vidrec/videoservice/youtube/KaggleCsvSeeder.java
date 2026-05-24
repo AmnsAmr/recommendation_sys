@@ -7,9 +7,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -17,6 +19,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
+import org.vidrec.videoservice.video.Category;
+import org.vidrec.videoservice.video.CategoryRepository;
 
 @Slf4j
 @Component
@@ -24,22 +28,24 @@ import org.springframework.stereotype.Component;
 public class KaggleCsvSeeder {
 
     private static final int PERSIST_BATCH_SIZE = 25;
+    private static final SeedCategory DEFAULT_CATEGORY = new SeedCategory("entertainment", "Entertainment");
 
+    private final CategoryRepository categoryRepository;
     private final YouTubeSyncPersister persister;
     private final ObjectMapper objectMapper;
 
     @EventListener(ApplicationReadyEvent.class)
     public void seedDatabase() {
         log.info("Checking for Kaggle dataset files to seed...");
-        
-        int totalSaved = 0;
-        totalSaved += seedRegion("USvideos.csv", "US_category_id.json", "en");
-        totalSaved += seedRegion("FRvideos.csv", "FR_category_id.json", "fr");
-        
-        if (totalSaved > 0) {
-            log.info("Kaggle CSV Seeding complete! Inserted {} new videos.", totalSaved);
+
+        int totalApplied = 0;
+        totalApplied += seedRegion("USvideos.csv", "US_category_id.json", "en");
+        totalApplied += seedRegion("FRvideos.csv", "FR_category_id.json", "fr");
+
+        if (totalApplied > 0) {
+            log.info("Kaggle CSV seeding complete. Applied {} video inserts or repairs.", totalApplied);
         } else {
-            log.info("No new Kaggle videos seeded (files might be missing or already processed).");
+            log.info("No Kaggle video changes were needed (files might be missing or already up to date).");
         }
     }
 
@@ -55,7 +61,8 @@ public class KaggleCsvSeeder {
         log.info("Starting seed for {} and {}...", csvFilename, jsonFilename);
         try (InputStream jsonInput = jsonResource.getInputStream();
              InputStream csvInput = csvResource.getInputStream()) {
-            Map<String, String> categoryMap = loadCategoryMap(jsonInput);
+            Map<String, SeedCategory> categoryMap = loadCategoryMap(jsonInput);
+            seedCategories(categoryMap);
             return parseAndPersistCsv(csvInput, categoryMap, defaultAudioLanguage, csvFilename);
         } catch (Exception e) {
             log.error("Failed to seed region data for {}", csvFilename, e);
@@ -63,8 +70,8 @@ public class KaggleCsvSeeder {
         }
     }
 
-    private Map<String, String> loadCategoryMap(InputStream is) throws Exception {
-        Map<String, String> map = new HashMap<>();
+    private Map<String, SeedCategory> loadCategoryMap(InputStream is) throws Exception {
+        Map<String, SeedCategory> map = new HashMap<>();
         JsonNode root = objectMapper.readTree(is);
         JsonNode items = root.get("items");
         if (items != null && items.isArray()) {
@@ -72,22 +79,44 @@ public class KaggleCsvSeeder {
                 String id = item.path("id").asText("");
                 String title = item.path("snippet").path("title").asText("");
                 if (!id.isBlank() && !title.isBlank()) {
-                    map.put(id, title.toLowerCase().replace(" & ", "-").replace(" ", "-"));
+                    map.put(id, new SeedCategory(normalizeCategoryId(title), title.trim()));
                 }
             }
         }
         return map;
     }
 
+    private void seedCategories(Map<String, SeedCategory> categoryMap) {
+        persistCategory(DEFAULT_CATEGORY);
+
+        Set<String> seenIds = new HashSet<>();
+        categoryMap.values().forEach(category -> {
+            if (seenIds.add(category.id())) {
+                persistCategory(category);
+            }
+        });
+    }
+
+    private void persistCategory(SeedCategory category) {
+        if (categoryRepository.existsById(category.id())) {
+            return;
+        }
+
+        categoryRepository.save(Category.builder()
+                .id(category.id())
+                .name(category.name())
+                .build());
+    }
+
     private int parseAndPersistCsv(
             InputStream is,
-            Map<String, String> categoryMap,
+            Map<String, SeedCategory> categoryMap,
             String defaultAudioLanguage,
             String csvFilename) throws Exception {
         List<YouTubeVideo> batch = new ArrayList<>(PERSIST_BATCH_SIZE);
         int malformedRows = 0;
         int parsedRows = 0;
-        int savedRows = 0;
+        int appliedRows = 0;
         try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String header = br.readLine(); // skip header
             if (header == null) {
@@ -105,9 +134,9 @@ public class KaggleCsvSeeder {
                 try {
                     String videoId = sanitizeCsvField(values[0]);
                     String title = sanitizeCsvField(values[1]);
-                    String categoryIdRaw = sanitizeCsvField(values[4]);
-                    String tagsRaw = sanitizeCsvField(values[6]);
-                    String thumbnailLink = sanitizeCsvField(values[11]);
+                    String categoryIdRaw = sanitizeCsvField(values[5]);
+                    String tagsRaw = sanitizeCsvField(values[7]);
+                    String thumbnailLink = sanitizeCsvField(values[12]);
                     String description = sanitizeCsvField(values[15]);
 
                     if (videoId.isBlank() || title.isBlank()) {
@@ -115,7 +144,7 @@ public class KaggleCsvSeeder {
                         continue;
                     }
 
-                    String localCategory = categoryMap.getOrDefault(categoryIdRaw, "entertainment");
+                    SeedCategory category = categoryMap.getOrDefault(categoryIdRaw, DEFAULT_CATEGORY);
 
                     List<String> tagsList = new ArrayList<>();
                     if (!tagsRaw.equalsIgnoreCase("[none]")) {
@@ -136,13 +165,13 @@ public class KaggleCsvSeeder {
                             0, // durationSeconds
                             defaultAudioLanguage,
                             tagsList,
-                            localCategory
+                            category.id()
                     ));
                     parsedRows++;
 
                     if (batch.size() >= PERSIST_BATCH_SIZE) {
-                        savedRows += persister.persistNewVideos(batch);
-                        log.info("Seed progress for {}: parsed={}, saved={}", csvFilename, parsedRows, savedRows);
+                        appliedRows += persister.persistNewVideos(batch);
+                        log.info("Seed progress for {}: parsed={}, applied={}", csvFilename, parsedRows, appliedRows);
                         batch.clear();
                     }
                 } catch (Exception parseEx) {
@@ -152,7 +181,7 @@ public class KaggleCsvSeeder {
         }
 
         if (!batch.isEmpty()) {
-            savedRows += persister.persistNewVideos(batch);
+            appliedRows += persister.persistNewVideos(batch);
             batch.clear();
         }
 
@@ -160,8 +189,8 @@ public class KaggleCsvSeeder {
             log.warn("Skipped {} malformed Kaggle CSV rows.", malformedRows);
         }
 
-        log.info("Parsed {} videos from {}. Persisted {} new videos.", parsedRows, csvFilename, savedRows);
-        return savedRows;
+        log.info("Parsed {} videos from {}. Applied {} inserts or repairs.", parsedRows, csvFilename, appliedRows);
+        return appliedRows;
     }
 
     private String readNextRecord(BufferedReader br) throws Exception {
@@ -201,5 +230,16 @@ public class KaggleCsvSeeder {
                 .replace("\r", " ")
                 .replace("\n", " ")
                 .trim();
+    }
+
+    private String normalizeCategoryId(String value) {
+        return value.toLowerCase()
+                .replace("&", " ")
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "")
+                .replaceAll("-+", "-");
+    }
+
+    private record SeedCategory(String id, String name) {
     }
 }

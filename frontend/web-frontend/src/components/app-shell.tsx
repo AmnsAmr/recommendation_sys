@@ -5,13 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { isAdminUser, useAuth } from "@/lib/auth";
+import { featuredNavCategories } from "@/lib/video-categories";
 
 const navItems = [
   { href: "/homepage", label: "Home" },
   { href: "/watch", label: "Watch" },
-  { href: "/homepage?genre=Fashion", label: "Fashion" },
-  { href: "/homepage?genre=Music", label: "Music" },
-  { href: "/homepage?genre=Gaming", label: "Gaming" },
+  ...featuredNavCategories.map((label) => ({
+    href: `/homepage?genre=${encodeURIComponent(label)}`,
+    label,
+  })),
   { href: "/history", label: "History" },
   { href: "/upload", label: "Upload" },
   { href: "/profile", label: "Profile" },

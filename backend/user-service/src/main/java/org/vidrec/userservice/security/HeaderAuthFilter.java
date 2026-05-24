@@ -33,6 +33,15 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
 
     private final String internalServiceToken;
 
+    @Value("${app.security.disabled:true}")
+    private boolean securityDisabled;
+
+    @Value("${app.security.test-user-id:00000000-0000-0000-0000-000000000001}")
+    private String testUserId;
+
+    @Value("${app.security.test-role:ADMIN}")
+    private String testUserRole;
+
     public HeaderAuthFilter(@Value("${INTERNAL_SERVICE_TOKEN}") String internalServiceToken) {
         this.internalServiceToken = internalServiceToken;
     }
@@ -53,6 +62,13 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         throws ServletException, IOException {
         String path = request.getRequestURI();
 
+        if (securityDisabled) {
+            // FIXME(RULES.md §4): test mode trusts a synthetic auth context so direct service calls work without the gateway.
+            authenticate(resolveDisabledAuthContext(request));
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // Allow public paths to proceed without gateway token validation
         if (isPublicPath(path)) {
             filterChain.doFilter(request, response);
@@ -71,12 +87,7 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-            authContext.userId(),
-            null,
-            List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
-        );
-        SecurityContextHolder.getContext().setAuthentication(auth);
+        authenticate(authContext);
 
         filterChain.doFilter(request, response);
     }
@@ -99,9 +110,49 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         return null;
     }
 
+    private AuthContext resolveDisabledAuthContext(HttpServletRequest request) {
+        String userId = request.getHeader(HEADER);
+        if (!StringUtils.hasText(userId)) {
+            userId = testUserId;
+        }
+
+        String roleHeader = request.getHeader(ROLE_HEADER);
+        UserRole role = defaultDisabledRole();
+        if (StringUtils.hasText(roleHeader)) {
+            try {
+                role = UserRole.valueOf(roleHeader.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                role = defaultDisabledRole();
+            }
+        }
+
+        return new AuthContext(userId, role);
+    }
+
+    private void authenticate(AuthContext authContext) {
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+            authContext.userId(),
+            null,
+            List.of(new SimpleGrantedAuthority("ROLE_" + authContext.role().name()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
     private boolean isTrustedGatewayRequest(HttpServletRequest request) {
         String internalToken = request.getHeader(INTERNAL_TOKEN_HEADER);
         return StringUtils.hasText(internalToken) && internalServiceToken.equals(internalToken);
+    }
+
+    private UserRole defaultDisabledRole() {
+        if (StringUtils.hasText(testUserRole)) {
+            try {
+                return UserRole.valueOf(testUserRole.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                // Fall through to ADMIN.
+            }
+        }
+
+        return UserRole.ADMIN;
     }
 
     private record AuthContext(String userId, UserRole role) {}

@@ -43,7 +43,7 @@ scorer, SVD client, and the JWT-protected `/recommendations/{userId}` endpoint a
       - `model/ItemFactor` + repo (`findByVideoId`, `findByCategoryId`, `findAllByVideoIdIn`, `findAllByCategoryIdOrderByGlobalScoreDesc`) -- vector + tags + categoryId + thumbnailUrl + language + viewCount + globalScore
       - `model/UserCategoryProfile` + repo (`findByUserId`, `findByUserIdAndSource`, `deleteByUserId`, `deleteByUserIdAndSource`)
       - `model/ProcessedEvent` + repo (`existsByEventId`) -- idempotency table
-- [x] Security: `HeaderAuthFilter` verifies `X-Internal-Token`, sets `Authentication.principal = userId` (String); `/recommendations/cold/**` and `/recommendations/similar/**` allowed unauthenticated; everything else authenticated
+- [x] Security: `HeaderAuthFilter` verifies `X-Internal-Token`, sets `Authentication.principal = userId` (String); `/recommendations/cold/**` and `/recommendations/similar/**` allowed unauthenticated; everything else authenticated unless `APP_SECURITY_DISABLED=true` enables local test mode
 - [x] Kafka client config in `application.properties` (SASL_SSL + PLAIN, `KAFKA_SASL_USERNAME` / `KAFKA_SASL_PASSWORD`)
 - [x] Redis client config in `application.properties` (`spring.data.redis.host` / `spring.data.redis.port`) -- Spring Boot auto-config provides `StringRedisTemplate`
 - [x] SVD sidecar URL config (`svd.sidecar.url` <- `SVD_SIDECAR_URL`, default `http://svd-sidecar:8000`)
@@ -225,6 +225,7 @@ Every listener must:
 9. `item_factors` includes `thumbnailUrl` and `language` so cold-start and similar-video responses can render without extra HTTP calls.
 10. Only admin-approved OWN videos arrive on `video.uploaded` (video-service publishes only on approve).
 11. `RS-01` security: `Authentication.principal` (set by `HeaderAuthFilter` from the gateway's `X-User-Id`) must equal the path `userId`. Return 403 `FORBIDDEN` on mismatch -- do not introspect the raw JWT here.
+    In local test mode (`APP_SECURITY_DISABLED=true`), this check is bypassed so recommendation endpoints remain callable without real auth.
 
 ---
 

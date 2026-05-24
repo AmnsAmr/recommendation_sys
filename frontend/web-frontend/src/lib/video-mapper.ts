@@ -1,4 +1,5 @@
 import type { ApiVideo, YouTubeVideo } from "@/lib/types";
+import { formatVideoCategoryLabel } from "@/lib/video-categories";
 
 export type UiVideo = {
   id: string;
@@ -50,38 +51,9 @@ function formatUploadedAt(value?: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function humanizeCategory(value?: string) {
-  if (!value) {
-    return "Video";
-  }
-
-  const normalized = value.trim().toLowerCase();
-  const known: Record<string, string> = {
-    "science-technology": "Science & Technology",
-    "howto-style": "How-to & Style",
-    "travel-events": "Travel & Events",
-    gaming: "Gaming",
-    education: "Education",
-    sports: "Sports",
-    music: "Music",
-    entertainment: "Entertainment",
-    news: "News",
-  };
-
-  if (known[normalized]) {
-    return known[normalized];
-  }
-
-  return normalized
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 export function fromApiVideo(video: ApiVideo): UiVideo {
   const youtubeId = video.youtubeId || (video.source === "youtube" ? video.videoId : undefined);
-  const category = humanizeCategory(video.categoryId || video.tags?.[0] || "Video");
+  const category = formatVideoCategoryLabel(video.categoryId || video.tags?.[0] || "Video");
   const durationSeconds = video.duration || 0;
   const thumbnailUrl = video.thumbnailUrl || (youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined);
   const creatorSeed = video.uploaderId?.slice(0, 8) || (youtubeId ? youtubeId.slice(0, 6) : "catalog");
@@ -112,7 +84,7 @@ export function fromApiVideo(video: ApiVideo): UiVideo {
 }
 
 export function fromYouTubeVideo(video: YouTubeVideo): UiVideo {
-  const category = humanizeCategory(video.localCategoryId || video.tags?.[0] || "YouTube");
+  const category = formatVideoCategoryLabel(video.localCategoryId || video.tags?.[0] || "YouTube");
   const durationSeconds = video.durationSeconds || 0;
 
   return {

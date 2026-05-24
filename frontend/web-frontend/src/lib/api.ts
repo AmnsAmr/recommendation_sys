@@ -16,6 +16,8 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const TOKEN_KEY = "auth_token";
+const AUTH_DISABLED = process.env.NEXT_PUBLIC_DISABLE_AUTH === "true";
+const TEST_TOKEN = "test-mode-token";
 
 type RequestOptions = RequestInit & {
   auth?: boolean;
@@ -26,7 +28,12 @@ export function getAuthToken() {
     return null;
   }
 
-  return window.localStorage.getItem(TOKEN_KEY);
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    return token;
+  }
+
+  return AUTH_DISABLED ? TEST_TOKEN : null;
 }
 
 export function setAuthToken(token: string) {

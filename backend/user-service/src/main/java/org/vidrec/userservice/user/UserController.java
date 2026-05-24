@@ -3,6 +3,7 @@ package org.vidrec.userservice.user;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,9 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+
+    @Value("${app.security.disabled:true}")
+    private boolean securityDisabled;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -69,6 +73,11 @@ public class UserController {
     }
 
     private void assertOwner(UUID pathUserId, String headerUserId, Authentication authentication) {
+        if (securityDisabled) {
+            // FIXME(RULES.md §4): test mode bypasses owner checks so profile endpoints stay callable without real auth.
+            return;
+        }
+
         String authenticatedUserId = resolveAuthenticatedUserId(headerUserId, authentication);
         if (authenticatedUserId == null || authenticatedUserId.isBlank()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Missing authenticated user context.", List.of());

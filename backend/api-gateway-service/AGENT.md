@@ -20,7 +20,7 @@ Built on Spring Cloud Gateway **server-webmvc** (not the reactive Gateway).
 - [x] Route config for user-service (`/users/**`, `/admin/users/**`)
 - [x] Route config for video-service (`/videos/**`, `/admin/videos/**`)
 - [x] Route config for recommendation-service (`/recommendations/**`)
-- [x] JWT validation filter (`filter/JwtAuthFilter`) using HMAC-SHA from `JWT_SECRET`
+- [x] JWT validation filter (`filter/JwtAuthFilter`) using HMAC-SHA from `JWT_SECRET` (or bypassed when `APP_SECURITY_DISABLED=true` for local test mode)
 - [x] X-User-Id header injection from JWT `sub` claim
 - [x] X-User-Role header injection from JWT `role` claim (defaults to `USER`)
 - [x] X-Internal-Token injection from `INTERNAL_SERVICE_TOKEN` env var
@@ -71,6 +71,7 @@ headers via a `HttpServletRequestWrapper`. Admin role enforcement happens in the
 
 1. JWT validation happens here, not in downstream services.
 2. On valid JWT: drop `Authorization`, add `X-User-Id`, `X-User-Role`, `X-Internal-Token` -- forward.
+   In local test mode (`APP_SECURITY_DISABLED=true`), the filter injects the synthetic `app.security.test-user-id` / `app.security.test-role` instead of requiring a bearer token.
 3. On invalid/expired JWT on a protected route: return 401 with `UNAUTHORIZED` error envelope.
 4. Downstream service URLs come from env vars `USER_SERVICE_URL`, `VIDEO_SERVICE_URL`, `REC_SERVICE_URL`
    (defaults to `http://localhost:808{1,2,3}` for local dev).

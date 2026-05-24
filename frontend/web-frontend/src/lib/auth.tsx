@@ -6,6 +6,14 @@ import { clearAuthToken } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
 
 const AUTH_EVENT = "videorec-auth-change";
+const AUTH_DISABLED = process.env.NEXT_PUBLIC_DISABLE_AUTH === "true";
+const TEST_USER: AuthUser = {
+  userId: process.env.NEXT_PUBLIC_TEST_USER_ID || "00000000-0000-0000-0000-000000000001",
+  email: "test-mode@local.invalid",
+  role: "USER",
+  username: "test-mode",
+  displayName: "Test Mode",
+};
 
 export function emitAuthChange() {
   window.dispatchEvent(new Event(AUTH_EVENT));
@@ -14,6 +22,10 @@ export function emitAuthChange() {
 function readUserSnapshot() {
   if (typeof window === "undefined") {
     return null;
+  }
+
+  if (AUTH_DISABLED) {
+    return JSON.stringify(TEST_USER);
   }
 
   return window.localStorage.getItem("user");
@@ -50,6 +62,10 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   useEffect(() => {
+    if (AUTH_DISABLED) {
+      return;
+    }
+
     if (!user) {
       router.push("/login");
       return;
@@ -59,6 +75,10 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   }, [router, user]);
+
+  if (AUTH_DISABLED) {
+    return <>{children}</>;
+  }
 
   if (!user) {
     return (
@@ -87,13 +107,13 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const rawUser = useSyncExternalStore(subscribeToAuthChanges, readUserSnapshot, () => null);
-  const user = useMemo(() => parseUser(rawUser), [rawUser]);
+  const user = useMemo(() => (AUTH_DISABLED ? TEST_USER : parseUser(rawUser)), [rawUser]);
 
   const logout = () => {
     window.localStorage.removeItem("user");
     clearAuthToken();
     emitAuthChange();
-    window.location.href = "/login";
+    window.location.href = AUTH_DISABLED ? "/homepage" : "/login";
   };
 
   return { user, logout };

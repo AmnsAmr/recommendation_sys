@@ -6,9 +6,10 @@ import { useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { api, setAuthToken } from "@/lib/api";
 import { emitAuthChange } from "@/lib/auth";
-import { categories } from "@/lib/mock-data";
-
-const interests = categories.filter((category) => category !== "For you");
+import {
+  defaultRegisterInterestIds,
+  registerCategoryOptions,
+} from "@/lib/video-categories";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,14 +17,24 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [selected, setSelected] = useState(["Fashion", "Music"]);
+  const [selected, setSelected] = useState(defaultRegisterInterestIds);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const toggle = (interest: string) => {
-    setSelected((current) =>
-      current.includes(interest) ? current.filter((item) => item !== interest) : [...current, interest],
-    );
+    if (selected.includes(interest)) {
+      setError("");
+      setSelected((current) => current.filter((item) => item !== interest));
+      return;
+    }
+
+    if (selected.length >= 10) {
+      setError("Pick up to 10 interests.");
+      return;
+    }
+
+    setError("");
+    setSelected((current) => [...current, interest]);
   };
 
   const handleRegister = async (event: React.FormEvent) => {
@@ -169,14 +180,14 @@ export default function RegisterPage() {
 
               <div className="mt-6">
                 <span className="text-sm font-bold text-slate-700">Choose interests</span>
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {interests.map((interest) => {
-                    const active = selected.includes(interest);
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {registerCategoryOptions.map((interest) => {
+                    const active = selected.includes(interest.id);
                     return (
                       <button
-                        key={interest}
+                        key={interest.id}
                         type="button"
-                        onClick={() => toggle(interest)}
+                        onClick={() => toggle(interest.id)}
                         className={`rounded-full border px-3 py-2 text-sm font-bold transition ${
                           active
                             ? "border-teal-700 bg-teal-50 text-teal-900"
@@ -184,7 +195,7 @@ export default function RegisterPage() {
                         }`}
                       >
                         {active ? "✓ " : "+ "}
-                        {interest}
+                        {interest.label}
                       </button>
                     );
                   })}

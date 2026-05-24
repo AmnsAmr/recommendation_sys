@@ -4,7 +4,7 @@ import java.util.Map;
 
 public final class RecommendationCategoryMapper {
 
-    private static final Map<String, String> UI_TO_BACKEND_CATEGORY = Map.ofEntries(
+    private static final Map<String, String> LEGACY_UI_TO_BACKEND_CATEGORY = Map.ofEntries(
             Map.entry("fashion", "howto-style"),
             Map.entry("music", "music"),
             Map.entry("sport", "sports"),
@@ -34,6 +34,17 @@ public final class RecommendationCategoryMapper {
             return null;
         }
 
-        return UI_TO_BACKEND_CATEGORY.getOrDefault(trimmed.toLowerCase(), trimmed.toLowerCase());
+        String legacyMapping = LEGACY_UI_TO_BACKEND_CATEGORY.get(trimmed.toLowerCase());
+        if (legacyMapping != null) {
+            return legacyMapping;
+        }
+
+        String normalized = trimmed.toLowerCase()
+                .replace("&", " ")
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "")
+                .replaceAll("-+", "-");
+
+        return normalized.isBlank() ? null : normalized;
     }
 }

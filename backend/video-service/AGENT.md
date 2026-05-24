@@ -28,7 +28,7 @@ platform -- all four video-related events (`video.uploaded`, `video.watched`, `v
 - [x] YouTube sync -- `youtube/` package fully implemented: `YouTubeService` (RestClient + retry + quota detection), `YouTubeSyncRunner` (ApplicationRunner + `@Scheduled` daily), `YouTubeSyncPersister` (idempotent insert by youtubeId), `YouTubeSyncState` singleton row tracking last run / quota hit / error
 - [x] Admin moderation -- `AdminVideoController` exposes dashboard, pending queue, get, update, approve, reject, delete (cleans `video_tags`, `watch_sessions`, outbox rows, R2 object)
 - [x] Transactional outbox -- `OutboxEvent` (`video_outbox` table) + `OutboxPublisher` polls every 1 s (`@Scheduled(fixedDelay=1000)`), marks `PENDING` -> `PUBLISHED`
-- [x] Spring Security + `HeaderAuthFilter` -- verifies `X-Internal-Token`, parses `X-User-Id` / `X-User-Role`, allows GET catalog/search/{id}/user/{id} unauthenticated; `/admin/**` requires `ROLE_ADMIN`
+- [x] Spring Security + `HeaderAuthFilter` -- verifies `X-Internal-Token`, parses `X-User-Id` / `X-User-Role`, allows GET catalog/search/{id}/user/{id} unauthenticated; `/admin/**` requires `ROLE_ADMIN` unless `APP_SECURITY_DISABLED=true` enables local test mode
 - [x] Kafka SSL config (PKCS12 keystore + JKS truststore, env-driven)
 - [x] R2 storage (`R2StorageService`) -- `upload`, `getPublicUrl`, `delete`
 - [x] Global exception handling (`shared/exception/`)
@@ -171,6 +171,7 @@ nested under `video/`. This matches the package-by-feature rule in RULES.md §2.
 7. YouTube sync is idempotent: skips any `youtubeId` already present in `videos`. Quota-exceeded aborts the run and writes to `YouTubeSyncState.lastQuotaHitAt`.
 8. Admin endpoints reject moderation actions on YOUTUBE-source videos (only OWN videos are moderatable).
 9. `HeaderAuthFilter` rejects any request not carrying the matching `X-Internal-Token`.
+   In local test mode (`APP_SECURITY_DISABLED=true`), it instead seeds a synthetic auth context so direct service calls still work.
 
 ---
 
