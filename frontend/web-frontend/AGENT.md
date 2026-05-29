@@ -12,9 +12,8 @@ detail / watch record / like / upload-init / upload-file / admin users / admin v
 endpoints. JWT is stored under `localStorage.auth_token` and sent as `Authorization: Bearer`. Auth
 state (`localStorage.user`) is still client-managed and is what `useAuth` and `AdminGuard` consume.
 
-The remaining gaps are tracker-style integrations (watch heartbeat, search-click tracking, like-button
-wiring on the watch page) and the recommendations feed (the back-end `/recommendations/{userId}`
-endpoint is itself not implemented yet).
+The remaining gaps are search-click tracking and the personalized recommendations feed (the back-end
+`/recommendations/{userId}` endpoint is itself not implemented yet).
 
 ---
 
@@ -37,17 +36,17 @@ endpoint is itself not implemented yet).
 - [x] `lib/video-mapper.ts` -- maps backend `ApiVideo` to UI props
 - [x] `lib/auth.tsx` -- `useAuth` (via `useSyncExternalStore` on `localStorage.user`), `isAdminUser`, `AdminGuard`; `logout()` clears both `auth_token` and `user`
 - [x] `lib/history.ts` -- `localStorage`-backed watch history with subscribe/emit
-- [x] `lib/mock-data.ts` -- still present as a fallback dataset for parts of the watch page (comments, recommendation sidebar)
+- [x] Mock-data fallbacks removed; pages now use real APIs with empty/loading states
 - [x] Shared components: `app-shell`, `admin-shell`, `brand-mark`, `video-card`, `video-poster`
 
 ### Not implemented
 
 - [ ] `hooks/` directory (`useRecommendations`, `useVideo`, `useWatchTracker`) -- API calls live inline in page components today
-- [ ] Watch tracking heartbeat -- the watch page does not yet `POST /videos/watch` on heartbeat / end / `beforeunload`
-- [ ] Like / dislike wired to `POST /videos/{id}/like` (the API method exists in `lib/api.ts` but is not called from `watch/page.tsx`)
+- [x] Watch tracking heartbeat -- the watch page posts `/videos/watch` on heartbeat / end / `beforeunload`
+- [x] Like / dislike wired to `POST /videos/{id}/like`
 - [ ] Search-click tracking -- no `POST /videos/search/click` call
-- [ ] Recommendation feed -- the back-end `GET /recommendations/{userId}` is not implemented; the homepage uses `/videos/catalog` as a placeholder, and the watch-page sidebar is still mock
-- [ ] Error boundaries, pagination, loading skeletons, toast/notification system
+- [ ] Recommendation feed -- the back-end `GET /recommendations/{userId}` is not implemented; the homepage uses `/videos/catalog` as a placeholder
+- [ ] Error boundaries and toast/notification system
 - [ ] Tests
 - [ ] Decide between `/admin/*` and the legacy top-level admin shells and delete the loser
 
@@ -90,7 +89,6 @@ web-frontend/
           |-- api.ts
           |-- auth.tsx
           |-- history.ts
-          |-- mock-data.ts
           |-- types.ts
           `-- video-mapper.ts
 ```
@@ -138,9 +136,9 @@ src/
 
 ## Known Issues / TODOs
 
-- Watch heartbeat, like/dislike, and search-click tracking are still simulated -- `lib/api.ts` already has the methods (`recordWatch`, `likeVideo`); they just aren't called from `watch/page.tsx`.
-- Recommendation feed is blocked on the back-end -- `GET /recommendations/{userId}` is not implemented yet, so the homepage feed falls back to `/videos/catalog` and the watch-page sidebar is still on mock data.
+- Search-click tracking is still not wired.
+- Recommendation feed is blocked on the back-end -- `GET /recommendations/{userId}` is not implemented yet, so the homepage feed falls back to `/videos/catalog`; the watch-page sidebar uses similar videos plus catalog pagination.
 - Duplicate admin shells live at both `/admin/...` and top-level `/admin-dashboard`, `/user-management`, `/video-moderation`; decide which set is canonical and delete the other.
-- No pagination, loading skeletons, error states, or toast/notification system on data-driven pages.
+- Toast/notification system is still missing.
 - No `hooks/` layer -- per-page API code is still inline.
 - No tests.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
@@ -81,6 +81,10 @@ function HomepageContent() {
   const [remoteVideos, setRemoteVideos] = useState<UiVideo[]>([]);
   const [feedSections, setFeedSections] = useState<FeedSection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [notice, setNotice] = useState("");
   const routeGenre = searchParams.get("genre");
   const active = selectedCategory ?? (routeGenre && categories.includes(routeGenre) ? routeGenre : forYouCategoryLabel);
@@ -107,7 +111,7 @@ function HomepageContent() {
       if (categoryId) {
         try {
           const coldStart = await api.getColdStartRecommendations(categoryId);
-          const coldVideos = await fetchVideosByIds((coldStart.videoIds || []).slice(0, 8));
+          const coldVideos = await fetchVideosByIds((coldStart.videoIds || []).slice(0, 16));
 
           if (coldVideos.length > 0) {
             return {
@@ -124,7 +128,7 @@ function HomepageContent() {
         }
       }
 
-      const fallback = await api.getCatalog({ categoryId: categoryId ?? undefined, size: 8 });
+      const fallback = await api.getCatalog({ categoryId: categoryId ?? undefined, size: 16 });
       if ((fallback.videos || []).length === 0) {
         return null;
       }
@@ -143,10 +147,13 @@ function HomepageContent() {
 
     const fetchFeed = async (): Promise<FeedResult> => {
       setLoading(true);
+      setPage(0);
+      setHasMore(true);
       setNotice("");
 
       if (query) {
-        const res = await api.searchVideos(query);
+        const res = await api.searchVideos(query, { page: 0, size: 16 });
+        setHasMore((res.videos || []).length >= 16);
         return {
           mode: "grid",
           videos: (res.videos || []).map(fromApiVideo),
@@ -246,6 +253,53 @@ function HomepageContent() {
   }, [active, query]);
 
   const showInterestSections = active === forYouCategoryLabel && !query && feedSections.length > 0;
+  const loadMore = async () => {
+    if (loadingMore || loading || showInterestSections || !hasMore) {
+      return;
+    }
+
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    try {
+      const categoryId = active === forYouCategoryLabel ? undefined : resolveVideoCategoryId(active) ?? undefined;
+      const response = query
+        ? await api.searchVideos(query, { page: nextPage, size: 16 })
+        : await api.getCatalog({ categoryId, page: nextPage, size: 16 });
+      const nextVideos = (response.videos || []).map(fromApiVideo);
+      setRemoteVideos((current) => {
+        const merged = [...current];
+        nextVideos.forEach((video) => {
+          if (!merged.some((candidate) => candidate.id === video.id)) {
+            merged.push(video);
+          }
+        });
+        return merged;
+      });
+      setPage(nextPage);
+      setHasMore((response.videos || []).length >= 16);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || showInterestSections) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void loadMore();
+        }
+      },
+      { rootMargin: "420px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  });
 
   return (
     <AppShell>
@@ -302,6 +356,18 @@ function HomepageContent() {
             ))}
           </div>
         )}
+        {!showInterestSections && remoteVideos.length > 0 ? (
+          <div ref={loadMoreRef} className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loading || loadingMore || !hasMore}
+              className="pressable rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-black text-slate-800 shadow-sm hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingMore ? "Loading more..." : hasMore ? "Load more videos" : "You are all caught up"}
+            </button>
+          </div>
+        ) : null}
       </section>
     </AppShell>
   );

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { api } from "@/lib/api";
-import { users as seedUsers } from "@/lib/mock-data";
 import type { AdminUser as ApiAdminUser } from "@/lib/types";
 
 type AdminUser = {
@@ -26,14 +25,13 @@ function fromApiUser(user: ApiAdminUser): AdminUser {
   };
 }
 
-const fallbackUsers = seedUsers.map((user) => ({ ...user, userId: user.username }));
-
 export default function UserManagementPage() {
-  const [users, setUsers] = useState<AdminUser[]>(fallbackUsers);
-  const [selectedUsername, setSelectedUsername] = useState("bob123");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [selectedUsername, setSelectedUsername] = useState("");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("All roles");
   const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.getAdminUsers()
@@ -42,7 +40,8 @@ export default function UserManagementPage() {
         setUsers(mapped);
         setSelectedUsername(mapped[0]?.username || "");
       })
-      .catch(() => setNotice("Admin user API unavailable. Showing local sample users."));
+      .catch(() => setNotice("Admin user API unavailable."))
+      .finally(() => setLoading(false));
   }, []);
 
   const filteredUsers = useMemo(
@@ -124,6 +123,13 @@ export default function UserManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm font-bold text-slate-500">
+                      Loading users...
+                    </td>
+                  </tr>
+                ) : null}
                 {filteredUsers.map((user) => (
                   <tr key={user.username} className={selectedUser?.username === user.username ? "bg-teal-50/50" : ""}>
                     <td className="py-4 font-bold text-slate-950">{user.username}</td>
@@ -150,6 +156,13 @@ export default function UserManagementPage() {
                     </td>
                   </tr>
                 ))}
+                {!loading && filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm font-bold text-slate-500">
+                      No users found.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

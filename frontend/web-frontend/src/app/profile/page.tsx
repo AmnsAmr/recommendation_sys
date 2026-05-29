@@ -5,34 +5,54 @@ import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { videos } from "@/lib/mock-data";
 import { formatVideoCategoryLabel } from "@/lib/video-categories";
 import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 export default function ProfilePage() {
   const { user } = useAuth();
   const [interests, setInterests] = useState<string[]>([]);
-  const [uploads, setUploads] = useState<UiVideo[]>(
-    videos.slice(0, 4).map((video) => ({
-      ...video,
-      id: video.title,
-      durationSeconds: 0,
-      source: "own",
-    })),
-  );
+  const [uploads, setUploads] = useState<UiVideo[]>([]);
+  const [loadingUploads, setLoadingUploads] = useState(false);
 
   useEffect(() => {
     if (!user?.userId) {
       return;
     }
 
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        setLoadingUploads(true);
+      }
+    });
     api.getUserVideos(user.userId)
-      .then((response) => setUploads(response.videos.map(fromApiVideo)))
-      .catch(() => undefined);
+      .then((response) => {
+        if (active) {
+          setUploads(response.videos.map(fromApiVideo));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUploads([]);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingUploads(false);
+        }
+      });
 
     api.getProfile(user.userId)
-      .then((profile) => setInterests(profile.preferences.map((preference) => formatVideoCategoryLabel(preference.category))))
+      .then((profile) => {
+        if (active) {
+          setInterests(profile.preferences.map((preference) => formatVideoCategoryLabel(preference.category)));
+        }
+      })
       .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
   }, [user?.userId]);
 
   return (
@@ -95,6 +115,16 @@ export default function ProfilePage() {
             {uploads.map((video) => (
               <VideoCard key={video.id} video={video} />
             ))}
+            {!loadingUploads && uploads.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-sm font-semibold text-slate-500">
+                No published uploads yet. New uploads appear here after admin approval.
+              </div>
+            ) : null}
+            {loadingUploads ? (
+              <div className="rounded-2xl bg-white p-8 text-sm font-bold text-slate-500 shadow-sm">
+                Loading uploads...
+              </div>
+            ) : null}
           </div>
         </section>
       </section>

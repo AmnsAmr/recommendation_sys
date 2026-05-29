@@ -1,37 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { YouTubePlayer } from "@/components/youtube-player";
 import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
 import { api, getAuthToken } from "@/lib/api";
 import { saveHistory } from "@/lib/history";
-import { comments, videos } from "@/lib/mock-data";
 import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
-
-function subscribeToUrlChange(onChange: () => void) {
-  window.addEventListener("popstate", onChange);
-  window.addEventListener("videorec-url-change", onChange);
-
-  return () => {
-    window.removeEventListener("popstate", onChange);
-    window.removeEventListener("videorec-url-change", onChange);
-  };
-}
-
-function readSearch() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return window.location.search;
-}
-
-function parseDuration(duration: string) {
-  const [minutes, seconds] = duration.split(":").map(Number);
-  return minutes * 60 + seconds;
-}
 
 function formatTime(value: number) {
   const minutes = Math.floor(value / 60);
@@ -52,51 +29,97 @@ function formatCount(value = 0) {
 }
 
 export default function WatchPage() {
-  const search = useSyncExternalStore(subscribeToUrlChange, readSearch, () => "");
-  const requestedVideo = useMemo(() => {
-    const value = new URLSearchParams(search).get("video");
-    const fallback = videos.find((video) => video.title === value) || videos[0];
-    return {
-      ...fallback,
-      id: value || fallback.title,
-      durationSeconds: parseDuration(fallback.duration),
-      source: "own" as const,
-    };
-  }, [search]);
-  const [resolvedVideos, setResolvedVideos] = useState<Record<string, UiVideo>>({});
-  const currentVideo = resolvedVideos[requestedVideo.id] ?? requestedVideo;
-  const shouldFetchVideo = requestedVideo.id !== requestedVideo.title;
-  const cachedVideo = resolvedVideos[requestedVideo.id];
+  return (
+    <Suspense fallback={<AppShell><WatchLoading /></AppShell>}>
+      <WatchContent />
+    </Suspense>
+  );
+}
+
+function WatchContent() {
+  const searchParams = useSearchParams();
+  const requestedVideoId = searchParams.get("video");
+  const [currentVideo, setCurrentVideo] = useState<UiVideo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!requestedVideo.id || !shouldFetchVideo || cachedVideo) {
-      return;
-    }
-
     let active = true;
-    api.getVideo(requestedVideo.id)
+
+    Promise.resolve().then(() => {
+      if (active) {
+        setLoading(true);
+        setError("");
+      }
+    });
+
+    const request = requestedVideoId
+      ? api.getVideo(requestedVideoId, { force: true })
+      : api.getCatalog({ page: 0, size: 1 }).then((response) => {
+          const first = response.videos[0];
+          if (!first) {
+            throw new Error("No videos are available yet.");
+          }
+          return first;
+        });
+
+    request
       .then((video) => {
         if (active) {
-          setResolvedVideos((current) => {
-            if (current[requestedVideo.id]) {
-              return current;
-            }
-
-            return {
-              ...current,
-              [requestedVideo.id]: fromApiVideo(video),
-            };
-          });
+          setCurrentVideo(fromApiVideo(video));
         }
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        if (active) {
+          setCurrentVideo(null);
+          setError(err instanceof Error ? err.message : "Could not load this video.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
 
     return () => {
       active = false;
     };
-  }, [cachedVideo, requestedVideo.id, shouldFetchVideo]);
+  }, [requestedVideoId]);
+
+  if (loading) {
+    return <AppShell><WatchLoading /></AppShell>;
+  }
+
+  if (!currentVideo) {
+    return (
+      <AppShell>
+        <section className="grid min-h-[420px] place-items-center rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-teal-700">Nothing to play</p>
+            <h1 className="mt-3 text-3xl font-black text-slate-950">{error || "No video found."}</h1>
+            <p className="mt-2 text-sm text-slate-500">Try opening a video from the homepage catalog.</p>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
 
   return <WatchExperience key={currentVideo.id} currentVideo={currentVideo} />;
+}
+
+function WatchLoading() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_410px]">
+      <div className="animate-pulse rounded-3xl bg-slate-200">
+        <div className="aspect-video" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="h-24 animate-pulse rounded-2xl bg-slate-200" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
@@ -106,7 +129,6 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
   const [expanded, setExpanded] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
-  const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [resolvedDurationSeconds, setResolvedDurationSeconds] = useState(currentVideo.durationSeconds || 0);
@@ -121,22 +143,11 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     : 0;
   const progressRef = useRef(0);
   const lastReportedWatchRef = useRef(0);
-  const [similarVideos, setSimilarVideos] = useState<UiVideo[]>([]);
-  const [similarLoading, setSimilarLoading] = useState(currentVideo.id !== currentVideo.title);
-  const fallbackVideos = useMemo(
-    () =>
-      videos
-        .filter((video) => video.title !== currentVideo.title)
-        .slice(0, 7)
-        .map((video) => ({
-          ...video,
-          id: video.title,
-          durationSeconds: parseDuration(video.duration),
-          source: "own" as const,
-        })),
-    [currentVideo.title],
-  );
-  const canFetchRecommendations = currentVideo.id !== currentVideo.title;
+  const [sideVideos, setSideVideos] = useState<UiVideo[]>([]);
+  const [sidePage, setSidePage] = useState(0);
+  const [sideLoading, setSideLoading] = useState(true);
+  const [sideHasMore, setSideHasMore] = useState(true);
+  const sideLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLikeCount(currentVideo.likeCount ?? 0);
@@ -144,7 +155,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     setLiked(false);
     setDisliked(false);
 
-    if (!getAuthToken() || !currentVideo.id || currentVideo.id === currentVideo.title) {
+    if (!getAuthToken() || !currentVideo.id) {
       return;
     }
 
@@ -165,49 +176,105 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     return () => {
       active = false;
     };
-  }, [currentVideo.id, currentVideo.title, currentVideo.likeCount, currentVideo.dislikeCount]);
+  }, [currentVideo.id, currentVideo.likeCount, currentVideo.dislikeCount]);
 
   useEffect(() => {
     progressRef.current = progress;
   }, [progress]);
 
   useEffect(() => {
-    if (!currentVideo.id || !canFetchRecommendations) {
+    if (!currentVideo.id) {
       return;
     }
 
     let active = true;
-    api.getSimilarVideos(currentVideo.id)
-      .then(async (res) => {
-        const similarIds = res.similarVideoIds
-          .filter((id) => id && id !== currentVideo.id)
-          .slice(0, 5);
-        if (!similarIds.length) {
-          if (active) {
-            setSimilarVideos([]);
-            setSimilarLoading(false);
-          }
-          return;
-        }
+    setSideVideos([]);
+    setSidePage(0);
+    setSideHasMore(true);
+    setSideLoading(true);
 
-        const promises = similarIds.map((id) => api.getVideo(id).catch(() => null));
-        const vids = await Promise.all(promises);
-        if (active) {
-          setSimilarVideos(vids.filter((video): video is Awaited<ReturnType<typeof api.getVideo>> => video !== null).map(fromApiVideo));
-          setSimilarLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setSimilarVideos([]);
-          setSimilarLoading(false);
-        }
-      });
+    loadSideVideos(0, true, currentVideo.id).finally(() => {
+      if (active) {
+        setSideLoading(false);
+      }
+    });
 
     return () => {
       active = false;
     };
-  }, [canFetchRecommendations, currentVideo.id]);
+  }, [currentVideo.id]);
+
+  const loadMoreSideVideos = async () => {
+    if (sideLoading || !sideHasMore) {
+      return;
+    }
+
+    setSideLoading(true);
+    await loadSideVideos(sidePage + 1, false, currentVideo.id);
+    setSideLoading(false);
+  };
+
+  useEffect(() => {
+    const target = sideLoadMoreRef.current;
+    if (!target) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void loadMoreSideVideos();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  });
+
+  async function loadSideVideos(page: number, reset: boolean, currentId: string) {
+    const collected: UiVideo[] = [];
+
+    if (reset) {
+      try {
+        const recommendations = await api.getSimilarVideos(currentId, { force: true });
+        const recommendedIds = (recommendations.similarVideoIds || [])
+          .filter((id) => id && id !== currentId)
+          .slice(0, 6);
+        const recommended = await Promise.all(recommendedIds.map((id) => api.getVideo(id).catch(() => null)));
+        collected.push(
+          ...recommended
+            .filter((video): video is Awaited<ReturnType<typeof api.getVideo>> => video !== null)
+            .map(fromApiVideo),
+        );
+      } catch {
+        // Catalog below keeps the rail useful while recommendations warm up.
+      }
+    }
+
+    try {
+      const catalog = await api.getCatalog({ page, size: 8 });
+      const catalogVideos = (catalog.videos || [])
+        .map(fromApiVideo)
+        .filter((video) => video.id !== currentId);
+      collected.push(...catalogVideos);
+      setSideHasMore((catalog.videos || []).length >= 8);
+      setSidePage(page);
+    } catch {
+      setSideHasMore(false);
+    }
+
+    setSideVideos((current) => {
+      const next = reset ? [] : [...current];
+      collected.forEach((video) => {
+        if (!next.some((candidate) => candidate.id === video.id)) {
+          next.push(video);
+        }
+      });
+      return next;
+    });
+  }
 
   const updateDuration = useCallback((nextDurationSeconds: number) => {
     if (!Number.isFinite(nextDurationSeconds) || nextDurationSeconds <= 0) {
@@ -592,37 +659,8 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-700 text-sm font-bold text-white">Y</div>
               <input className="field h-10 px-3 text-sm" placeholder="Add a thoughtful comment" />
             </div>
-            <div className="mt-5 divide-y divide-slate-100">
-              {comments.map((comment, index) => {
-                const active = commentLikes[comment.author] || false;
-                return (
-                  <article key={comment.author} className="animate-in flex gap-3 py-4" style={{ animationDelay: `${index * 80}ms` }}>
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-bold text-slate-700">
-                      {comment.avatar}
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-slate-950">{comment.author}</p>
-                        <p className="text-xs text-slate-500">{comment.timestamp}</p>
-                      </div>
-                      <p className="mt-1 text-sm leading-6 text-slate-700">{comment.text}</p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCommentLikes((current) => ({
-                            ...current,
-                            [comment.author]: !active,
-                          }))}
-                        className={`pressable mt-2 rounded-md px-2 py-1 text-xs font-bold ${
-                          active ? "bg-teal-50 text-teal-800" : "text-slate-500 hover:text-teal-700"
-                        }`}
-                      >
-                        <span aria-hidden="true">▲</span> Like {comment.likes + (active ? 1 : 0)}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-semibold text-slate-500">
+              Comments are not connected to a backend service yet. The player will keep recording watch history and recommendation signals.
             </div>
           </section>
         </section>
@@ -631,19 +669,30 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="text-lg font-black text-slate-950">Up next</h2>
             <div className="mt-4 grid gap-3">
-              {similarVideos.length > 0 ? (
-                similarVideos.map((video) => (
-                  <VideoCard key={video.id} video={video} compact />
-                ))
-              ) : fallbackVideos.length > 0 ? (
-                fallbackVideos.map((video) => (
+              {sideVideos.length > 0 ? (
+                sideVideos.map((video) => (
                   <VideoCard key={video.id} video={video} compact />
                 ))
               ) : (
                 <p className="text-sm text-slate-500">
-                  {similarLoading ? "Loading recommendations..." : "No related videos yet."}
+                  {sideLoading ? "Loading recommendations..." : "No related videos yet."}
                 </p>
               )}
+              {sideLoading && sideVideos.length > 0 ? (
+                <div className="h-20 animate-pulse rounded-xl bg-slate-100" />
+              ) : null}
+              {sideHasMore ? (
+                <div ref={sideLoadMoreRef}>
+                  <button
+                    type="button"
+                    onClick={loadMoreSideVideos}
+                    disabled={sideLoading}
+                    className="pressable w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {sideLoading ? "Loading..." : "Load more videos"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </aside>

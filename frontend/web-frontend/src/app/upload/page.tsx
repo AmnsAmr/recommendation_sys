@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { api } from "@/lib/api";
+import { api, getAuthToken } from "@/lib/api";
 import {
   defaultUploadCategoryId,
   uploadCategoryOptions,
@@ -26,6 +26,11 @@ export default function UploadPage() {
       return;
     }
 
+    if (!getAuthToken()) {
+      setStatus("Sign in again before uploading. The backend needs a valid session for both upload steps.");
+      return;
+    }
+
     setLoading(true);
     setStatus("");
 
@@ -44,7 +49,12 @@ export default function UploadPage() {
       await api.uploadVideoFile(init.videoId, init.uploadToken, file);
       setStatus("Upload sent to the backend. The video is waiting for admin review.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Upload failed.");
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      setStatus(
+        message.includes("403") || message.toLowerCase().includes("forbidden")
+          ? `${message}. If you recently changed auth settings, log out, log in again, then retry the upload.`
+          : message,
+      );
     } finally {
       setLoading(false);
     }

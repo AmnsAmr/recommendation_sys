@@ -127,7 +127,7 @@ public class VideoService {
         }
         if (!token.getUploaderId().equals(uploaderId)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
-                "You are not the uploader of this video.", List.of());
+                "Upload session does not match the signed-in user. Log in again and start a new upload.", List.of());
         }
 
         validateFile(file);

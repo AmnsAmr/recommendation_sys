@@ -4,13 +4,6 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { api } from "@/lib/api";
 
-const activity = [
-  { time: "2 min ago", event: "Spring Boot REST API uploaded", actor: "alice_dev", status: "pending" },
-  { time: "14 min ago", event: "User banned for spam behavior", actor: "Admin", status: "banned" },
-  { time: "1h ago", event: "Kafka tutorial approved", actor: "Admin", status: "approved" },
-  { time: "3h ago", event: "Recommendation cache refreshed", actor: "System", status: "complete" },
-];
-
 export default function AdminDashboardPage() {
   const [exported, setExported] = useState(false);
   const [metrics, setMetrics] = useState([
@@ -73,29 +66,11 @@ export default function AdminDashboardPage() {
               Dashboard report prepared locally.
             </div>
           ) : null}
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.16em] text-slate-500">
-                <tr>
-                  <th className="py-3 font-bold">Time</th>
-                  <th className="py-3 font-bold">Event</th>
-                  <th className="py-3 font-bold">Actor</th>
-                  <th className="py-3 font-bold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {activity.map((item) => (
-                  <tr key={`${item.time}-${item.event}`}>
-                    <td className="py-4 text-slate-500">{item.time}</td>
-                    <td className="py-4 font-semibold text-slate-950">{item.event}</td>
-                    <td className="py-4 text-slate-600">{item.actor}</td>
-                    <td className="py-4">
-                      <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{item.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <h3 className="text-lg font-black text-slate-950">No live activity stream yet</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              This dashboard now shows only real aggregate metrics. Add an audit/event endpoint before listing individual activity rows.
+            </p>
           </div>
         </div>
 

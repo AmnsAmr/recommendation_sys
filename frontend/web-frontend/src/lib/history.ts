@@ -1,4 +1,3 @@
-import { videos } from "@/lib/mock-data";
 import type { UiVideo } from "@/lib/video-mapper";
 
 export type HistoryItem = {
@@ -70,23 +69,5 @@ export function clearHistory() {
 }
 
 export function hydrateHistory(items: HistoryItem[]) {
-  return items.flatMap((item) => {
-    if (item.video) {
-      return [item];
-    }
-
-    const video = videos.find((candidate) => candidate.title === item.title);
-    if (!video) {
-      return [];
-    }
-
-    const hydratedVideo: UiVideo = {
-      ...video,
-      id: video.title,
-      durationSeconds: 0,
-      source: "own",
-    };
-
-    return [{ ...item, videoId: item.videoId || video.title, video: hydratedVideo }];
-  });
+  return items.filter((item) => item.video);
 }

@@ -4,31 +4,45 @@ import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { VideoPoster } from "@/components/video-poster";
 import { api } from "@/lib/api";
-import { videos } from "@/lib/mock-data";
 import type { AdminVideo } from "@/lib/types";
 
-const initialQueue = videos.slice(0, 4).map((video, index) => ({
-  ...video,
-  status: index < 2 ? "Under review" : "Approved",
-  uploaded: index === 0 ? "2 min ago" : index === 1 ? "1h ago" : "Yesterday",
-  notes: "",
-}));
-
-type QueueVideo = (typeof initialQueue)[number] & { videoId?: string };
+type QueueVideo = {
+  id: string;
+  title: string;
+  creator: string;
+  channel: string;
+  views: string;
+  uploadedAt: string;
+  duration: string;
+  durationSeconds: number;
+  category: string;
+  score: string;
+  poster: string;
+  source: string;
+  description: string;
+  status: string;
+  uploaded: string;
+  notes: string;
+  videoId?: string;
+};
 
 function fromApiVideo(video: AdminVideo): QueueVideo {
+  const status = video.status?.toUpperCase();
   return {
+    id: video.videoId,
     title: video.title,
     creator: video.uploaderId?.slice(0, 8) || "creator",
     channel: "VideoRec",
     views: "0",
     uploadedAt: video.createdAt ? new Date(video.createdAt).toLocaleDateString() : "Recently",
     duration: "00:00",
+    durationSeconds: 0,
     category: "Upload",
     score: "Pending",
     poster: "video",
+    source: "own",
     description: "Pending uploaded video.",
-    status: video.status === "ready" ? "Approved" : video.status === "rejected" ? "Rejected" : "Under review",
+    status: status === "READY" ? "Approved" : status === "REJECTED" ? "Rejected" : "Under review",
     uploaded: video.createdAt ? new Date(video.createdAt).toLocaleDateString() : "Recently",
     notes: "",
     videoId: video.videoId,
@@ -36,21 +50,21 @@ function fromApiVideo(video: AdminVideo): QueueVideo {
 }
 
 export default function VideoModerationPage() {
-  const [queue, setQueue] = useState<QueueVideo[]>(initialQueue);
+  const [queue, setQueue] = useState<QueueVideo[]>([]);
   const [filter, setFilter] = useState("All videos");
-  const [selectedTitle, setSelectedTitle] = useState(initialQueue[0]?.title || "");
+  const [selectedTitle, setSelectedTitle] = useState("");
   const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api.getPendingVideos()
       .then((response) => {
         const mapped = response.videos.map(fromApiVideo);
-        if (mapped.length > 0) {
-          setQueue(mapped);
-          setSelectedTitle(mapped[0].title);
-        }
+        setQueue(mapped);
+        setSelectedTitle(mapped[0]?.title || "");
       })
-      .catch(() => setNotice("Admin video API unavailable. Showing local sample queue."));
+      .catch(() => setNotice("Admin video API unavailable."))
+      .finally(() => setLoading(false));
   }, []);
 
   const visibleQueue = useMemo(
@@ -107,6 +121,11 @@ export default function VideoModerationPage() {
           ) : null}
 
           <div className="mt-5 grid gap-3">
+            {loading ? (
+              <div className="rounded-lg bg-slate-50 p-8 text-center text-sm font-bold text-slate-500">
+                Loading review queue...
+              </div>
+            ) : null}
             {visibleQueue.map((video) => (
               <article
                 key={video.title}
@@ -152,6 +171,11 @@ export default function VideoModerationPage() {
                 </div>
               </article>
             ))}
+            {!loading && visibleQueue.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-bold text-slate-500">
+                No videos match this filter.
+              </div>
+            ) : null}
           </div>
         </section>
 

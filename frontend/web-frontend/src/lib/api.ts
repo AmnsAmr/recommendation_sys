@@ -234,8 +234,12 @@ export const api = {
     return apiRequest<VideoListResponse>(`/videos/catalog?${search.toString()}`, { auth: false });
   },
 
-  searchVideos(query: string) {
-    const search = new URLSearchParams({ q: query, page: "0", size: "24" });
+  searchVideos(query: string, params: { page?: number; size?: number } = {}) {
+    const search = new URLSearchParams({
+      q: query,
+      page: String(params.page ?? 0),
+      size: String(params.size ?? 24),
+    });
     return apiRequest<VideoListResponse>(`/videos/search?${search.toString()}`, { auth: false });
   },
 

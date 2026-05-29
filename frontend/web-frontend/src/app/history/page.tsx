@@ -1,14 +1,56 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppShell } from "@/components/app-shell";
 import { VideoCard } from "@/components/video-card";
-import { clearHistory, hydrateHistory, parseHistory, readHistorySnapshot, subscribeToHistory } from "@/lib/history";
+import { api } from "@/lib/api";
+import { clearHistory, parseHistory, readHistorySnapshot, subscribeToHistory } from "@/lib/history";
+import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 export default function HistoryPage() {
   const rawHistory = useSyncExternalStore(subscribeToHistory, readHistorySnapshot, () => "[]");
   const items = parseHistory(rawHistory);
-  const hydrated = hydrateHistory(items);
+  const [remoteVideos, setRemoteVideos] = useState<Record<string, UiVideo>>({});
+
+  useEffect(() => {
+    let active = true;
+    const missingIds = items
+      .filter((item) => !item.video && item.videoId && !remoteVideos[item.videoId])
+      .map((item) => item.videoId);
+
+    if (!missingIds.length) {
+      return;
+    }
+
+    Promise.all(
+      Array.from(new Set(missingIds)).map((id) =>
+        api.getVideo(id).then((video) => [id, fromApiVideo(video)] as const).catch(() => null),
+      ),
+    ).then((results) => {
+      if (!active) {
+        return;
+      }
+
+      setRemoteVideos((current) => {
+        const next = { ...current };
+        results.forEach((result) => {
+          if (result) {
+            next[result[0]] = result[1];
+          }
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [items, remoteVideos]);
+
+  const visibleItems = items.flatMap((item) => {
+    const video = item.video || remoteVideos[item.videoId];
+    return video ? [{ ...item, video }] : [];
+  });
 
   const clear = () => {
     clearHistory();
@@ -27,7 +69,7 @@ export default function HistoryPage() {
         </button>
       }
     >
-      {hydrated.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <section className="grid min-h-[360px] place-items-center rounded-2xl bg-white p-8 text-center shadow-sm">
           <div>
             <h2 className="text-2xl font-black text-slate-950">No watched videos yet</h2>
@@ -36,9 +78,9 @@ export default function HistoryPage() {
         </section>
       ) : (
         <section className="grid gap-5 sm:grid-cols-2">
-          {hydrated.map((item) => (
+          {visibleItems.map((item) => (
             <div key={item.videoId}>
-              <VideoCard video={item.video!} />
+              <VideoCard video={item.video} />
               <p className="mt-2 text-xs font-semibold text-slate-500">
                 Watched {new Date(item.watchedAt).toLocaleString()} - {Math.round(item.progress)}% completed
               </p>
