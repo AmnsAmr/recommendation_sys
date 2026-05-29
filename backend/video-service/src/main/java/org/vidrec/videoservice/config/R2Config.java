@@ -1,6 +1,7 @@
 package org.vidrec.videoservice.config;
 
 import java.net.URI;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 public class R2Config {
 
     @Bean
+    @ConditionalOnProperty(name = "video.storage.provider", havingValue = "r2", matchIfMissing = true)
     public S3Client s3Client(
         @Value("${r2.account-id}") String accountId,
         @Value("${r2.access-key-id}") String accessKeyId,

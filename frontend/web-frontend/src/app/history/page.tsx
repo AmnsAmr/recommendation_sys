@@ -37,7 +37,7 @@ export default function HistoryPage() {
       ) : (
         <section className="grid gap-5 sm:grid-cols-2">
           {hydrated.map((item) => (
-            <div key={item.title}>
+            <div key={item.videoId}>
               <VideoCard video={item.video!} />
               <p className="mt-2 text-xs font-semibold text-slate-500">
                 Watched {new Date(item.watchedAt).toLocaleString()} - {Math.round(item.progress)}% completed

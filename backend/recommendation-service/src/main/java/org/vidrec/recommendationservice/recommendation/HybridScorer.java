@@ -24,7 +24,7 @@ public class HybridScorer {
         }
 
         Map<String, Double> svdScores = svdClient.predictBatch(userId.toString(), candidateVideoIds);
-        Map<String, Double> contentScores = contentBasedService.scoreCandidates(userId, candidateVideoIds);
+        Map<String, Double> contentScores = contentBasedService.scoreCandidates(userId, candidateVideoIds, false);
         Map<String, Double> normalizedSvd = normalize(candidateVideoIds, svdScores);
         Map<String, Double> normalizedContent = normalize(candidateVideoIds, contentScores);
 

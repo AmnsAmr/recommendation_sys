@@ -81,6 +81,7 @@ public class RecommendationEventConsumer {
         try {
             if (event.clickedVideoId() != null) {
                 interactionService.insertSearchInteraction(event);
+                recommendationCacheService.invalidate(UUID.fromString(event.userId()));
             }
             processedEventService.save(event.eventId());
             log.info("Successfully processed user.searched event: {}", event.eventId());

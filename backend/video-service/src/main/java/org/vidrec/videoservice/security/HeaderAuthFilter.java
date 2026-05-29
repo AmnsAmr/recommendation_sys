@@ -116,6 +116,7 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return path.startsWith("/videos/catalog")
             || path.startsWith("/videos/search")
+            || path.startsWith("/videos/media/")
             || path.matches("^/videos/[^/]+$")
             || path.startsWith("/videos/user/");
     }

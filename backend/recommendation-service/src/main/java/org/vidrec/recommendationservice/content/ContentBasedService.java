@@ -80,12 +80,19 @@ public class ContentBasedService {
 
     @Transactional(readOnly = true)
     public Map<String, Double> scoreCandidates(UUID userId, List<String> candidateVideoIds) {
+        return scoreCandidates(userId, candidateVideoIds, true);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Double> scoreCandidates(UUID userId, List<String> candidateVideoIds, boolean includeDeclaredProfile) {
         if (candidateVideoIds == null || candidateVideoIds.isEmpty()) {
             return Map.of();
         }
 
         double[] userProfile = buildUserContentProfile(interactionRepository.findByUserId(userId));
-        blendDeclaredProfile(userProfile, userId);
+        if (includeDeclaredProfile) {
+            blendDeclaredProfile(userProfile, userId);
+        }
         ContentVectorizer.normalize(userProfile);
 
         Map<String, ItemFactor> candidates = itemFactorRepository.findAllByVideoIdIn(candidateVideoIds).stream()

@@ -16,7 +16,8 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class RecommendationCacheService {
 
-    private static final String CACHE_PREFIX = "rec:";
+    private static final String CACHE_PREFIX = "rec:hybrid:";
+    private static final String LEGACY_CACHE_PREFIX = "rec:";
     private static final Duration TTL = Duration.ofMinutes(10);
     private static final TypeReference<List<String>> VIDEO_ID_LIST = new TypeReference<>() {};
 
@@ -49,6 +50,7 @@ public class RecommendationCacheService {
     public void invalidate(UUID userId) {
         try {
             redisTemplate.delete(key(userId));
+            redisTemplate.delete(legacyKey(userId));
             log.info("Invalidated cache for user={}", userId);
         } catch (RuntimeException ex) {
             log.error("Failed to invalidate cache for user={}", userId, ex);
@@ -57,5 +59,9 @@ public class RecommendationCacheService {
 
     private String key(UUID userId) {
         return CACHE_PREFIX + userId.toString();
+    }
+
+    private String legacyKey(UUID userId) {
+        return LEGACY_CACHE_PREFIX + userId.toString();
     }
 }

@@ -186,6 +186,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return path.startsWith("/videos/catalog")
                 || path.startsWith("/videos/search")
                 || path.startsWith("/videos/youtube/search")
+                || path.startsWith("/videos/media/")
                 || path.matches("^/videos/[^/]+/?$")
                 || path.startsWith("/videos/user/")
                 || path.startsWith("/recommendations/cold/")

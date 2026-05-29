@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AppShell } from "@/components/app-shell";
+import { YouTubePlayer } from "@/components/youtube-player";
 import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
 import { api, getAuthToken } from "@/lib/api";
@@ -38,6 +39,18 @@ function formatTime(value: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function formatCount(value = 0) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+  }
+
+  return String(value);
+}
+
 export default function WatchPage() {
   const search = useSyncExternalStore(subscribeToUrlChange, readSearch, () => "");
   const requestedVideo = useMemo(() => {
@@ -47,7 +60,7 @@ export default function WatchPage() {
       ...fallback,
       id: value || fallback.title,
       durationSeconds: parseDuration(fallback.duration),
-      source: "own",
+      source: "own" as const,
     };
   }, [search]);
   const [resolvedVideos, setResolvedVideos] = useState<Record<string, UiVideo>>({});
@@ -96,9 +109,18 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
   const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const durationSeconds = currentVideo?.durationSeconds || 0;
-  const progressPct = Math.min((progress / Math.max(durationSeconds, 1)) * 100, 100);
+  const [resolvedDurationSeconds, setResolvedDurationSeconds] = useState(currentVideo.durationSeconds || 0);
+  const [likeCount, setLikeCount] = useState(currentVideo.likeCount ?? 0);
+  const [dislikeCount, setDislikeCount] = useState(currentVideo.dislikeCount ?? 0);
+  const [feedbackPending, setFeedbackPending] = useState(false);
+  const [interactionMessage, setInteractionMessage] = useState<string | null>(null);
+  const durationSeconds = Math.max(resolvedDurationSeconds, currentVideo.durationSeconds || 0);
+  const displayDuration = durationSeconds > 0 ? formatTime(durationSeconds) : currentVideo.duration;
+  const progressPct = durationSeconds > 0
+    ? Math.min((progress / durationSeconds) * 100, 100)
+    : 0;
   const progressRef = useRef(0);
+  const lastReportedWatchRef = useRef(0);
   const [similarVideos, setSimilarVideos] = useState<UiVideo[]>([]);
   const [similarLoading, setSimilarLoading] = useState(currentVideo.id !== currentVideo.title);
   const fallbackVideos = useMemo(
@@ -115,6 +137,35 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     [currentVideo.title],
   );
   const canFetchRecommendations = currentVideo.id !== currentVideo.title;
+
+  useEffect(() => {
+    setLikeCount(currentVideo.likeCount ?? 0);
+    setDislikeCount(currentVideo.dislikeCount ?? 0);
+    setLiked(false);
+    setDisliked(false);
+
+    if (!getAuthToken() || !currentVideo.id || currentVideo.id === currentVideo.title) {
+      return;
+    }
+
+    let active = true;
+    api.getVideoReaction(currentVideo.id)
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        setLikeCount(response.likeCount);
+        setDislikeCount(response.dislikeCount);
+        setLiked(response.action === "like");
+        setDisliked(response.action === "dislike");
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [currentVideo.id, currentVideo.title, currentVideo.likeCount, currentVideo.dislikeCount]);
 
   useEffect(() => {
     progressRef.current = progress;
@@ -158,22 +209,75 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
     };
   }, [canFetchRecommendations, currentVideo.id]);
 
+  const updateDuration = useCallback((nextDurationSeconds: number) => {
+    if (!Number.isFinite(nextDurationSeconds) || nextDurationSeconds <= 0) {
+      return;
+    }
+
+    const rounded = Math.round(nextDurationSeconds);
+    setResolvedDurationSeconds((current) => (
+      current === rounded ? current : rounded
+    ));
+  }, []);
+
+  const persistHistory = useCallback((watchDuration: number) => {
+    const normalizedWatchDuration = Math.max(Math.round(watchDuration), 0);
+    const boundedWatchDuration = durationSeconds > 0
+      ? Math.min(normalizedWatchDuration, durationSeconds)
+      : normalizedWatchDuration;
+    const completed = durationSeconds > 0
+      ? Math.min((boundedWatchDuration / durationSeconds) * 100, 100)
+      : (boundedWatchDuration > 0 ? 1 : 0);
+
+    saveHistory({
+      videoId: currentVideo.id,
+      title: currentVideo.title,
+      watchedAt: new Date().toISOString(),
+      progress: Math.max(completed, boundedWatchDuration > 0 ? 1 : 0),
+      video: {
+        ...currentVideo,
+        duration: displayDuration,
+        durationSeconds,
+        likeCount,
+        dislikeCount,
+      },
+    });
+  }, [currentVideo, dislikeCount, displayDuration, durationSeconds, likeCount]);
+
   const sendWatchEvent = useCallback((watchDuration: number) => {
     if (!getAuthToken() || !currentVideo.id) {
       return;
     }
 
+    const normalizedWatchDuration = Math.max(Math.round(watchDuration), 0);
+    if (normalizedWatchDuration <= 0) {
+      return;
+    }
+
+    const reportedDuration = Math.max(durationSeconds, normalizedWatchDuration, 1);
+    const boundedWatchDuration = Math.min(normalizedWatchDuration, reportedDuration);
+
     api.recordWatch({
       videoId: currentVideo.id,
-      watchDuration: Math.round(watchDuration),
-      videoDuration: Math.max(durationSeconds, 1),
-      completionPct: Math.min(watchDuration / Math.max(durationSeconds, 1), 1),
+      watchDuration: boundedWatchDuration,
+      videoDuration: reportedDuration,
+      completionPct: Math.min(boundedWatchDuration / reportedDuration, 1),
       source: currentVideo.source === "youtube" ? "youtube" : "own",
     }).catch(() => undefined);
   }, [currentVideo.id, currentVideo.source, durationSeconds]);
 
+  const flushWatchProgress = useCallback((watchDuration: number) => {
+    const normalizedWatchDuration = Math.max(Math.round(watchDuration), 0);
+    if (normalizedWatchDuration <= lastReportedWatchRef.current) {
+      return;
+    }
+
+    lastReportedWatchRef.current = normalizedWatchDuration;
+    sendWatchEvent(normalizedWatchDuration);
+  }, [sendWatchEvent]);
+
   useEffect(() => {
-    if (!playing) {
+    if (!playing || currentVideo.source === "youtube" || currentVideo.url) {
       return;
     }
 
@@ -182,36 +286,52 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
         if (value >= durationSeconds) {
           window.clearInterval(interval);
           setPlaying(false);
-          sendWatchEvent(durationSeconds);
+          persistHistory(durationSeconds);
+          flushWatchProgress(durationSeconds);
           return durationSeconds;
         }
 
         return value + 1;
       });
-    }, 350);
+    }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [durationSeconds, playing, sendWatchEvent]);
+  }, [currentVideo.source, currentVideo.url, durationSeconds, flushWatchProgress, persistHistory, playing]);
 
   useEffect(() => {
     if (!playing) {
       return;
     }
 
-    const heartbeat = window.setInterval(() => sendWatchEvent(progressRef.current), 30000);
+    const heartbeat = window.setInterval(() => {
+      if (progressRef.current <= 0) {
+        return;
+      }
+
+      persistHistory(progressRef.current);
+      flushWatchProgress(progressRef.current);
+    }, 30000);
     return () => window.clearInterval(heartbeat);
-  }, [currentVideo.id, durationSeconds, playing, sendWatchEvent]);
+  }, [flushWatchProgress, persistHistory, playing]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (progressRef.current > 0) {
-        sendWatchEvent(progressRef.current);
+        persistHistory(progressRef.current);
+        flushWatchProgress(progressRef.current);
       }
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [currentVideo.id, durationSeconds, sendWatchEvent]);
+  }, [flushWatchProgress, persistHistory]);
+
+  useEffect(() => () => {
+    if (progressRef.current > 0) {
+      persistHistory(progressRef.current);
+      flushWatchProgress(progressRef.current);
+    }
+  }, [flushWatchProgress, persistHistory]);
 
   const triggerReaction = (value: string) => {
     setReaction(value);
@@ -221,16 +341,40 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
   const togglePlay = () => {
     setPlaying((value) => !value);
     if (!playing) {
-      saveHistory({
-        title: currentVideo.title,
-        watchedAt: new Date().toISOString(),
-        progress: Math.max(progressPct, 1),
-      });
-    }
-    if (playing) {
-      sendWatchEvent(progressRef.current);
+      persistHistory(Math.max(progressRef.current, 1));
+    } else {
+      persistHistory(progressRef.current);
+      flushWatchProgress(progressRef.current);
     }
     triggerReaction(playing ? "paused" : "playing");
+  };
+
+  const submitFeedback = async (action: "like" | "dislike") => {
+    if (!getAuthToken()) {
+      setInteractionMessage("Sign in to save likes and dislikes for recommendations.");
+      return;
+    }
+
+    setFeedbackPending(true);
+    setInteractionMessage(null);
+
+    try {
+      const response = await api.likeVideo(currentVideo.id, action);
+      setLikeCount(response.likeCount);
+      setDislikeCount(response.dislikeCount);
+      setLiked(response.action === "like");
+      setDisliked(response.action === "dislike");
+      setInteractionMessage(response.action === null
+        ? "Feedback removed from this video."
+        : action === "like"
+        ? "Like saved for your recommendations."
+        : "Dislike saved for your recommendations.");
+      triggerReaction(response.action === null ? "removed" : action === "like" ? "liked" : "noted");
+    } catch {
+      setInteractionMessage("Could not save your feedback right now.");
+    } finally {
+      setFeedbackPending(false);
+    }
   };
 
   return (
@@ -240,12 +384,35 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
           <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-xl">
             <div className="relative">
               {currentVideo.source === "youtube" && currentVideo.youtubeId ? (
-                <iframe
-                  className="aspect-video w-full"
-                  src={`https://www.youtube.com/embed/${currentVideo.youtubeId}`}
+                <YouTubePlayer
+                  videoId={currentVideo.youtubeId}
                   title={currentVideo.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+                  className="aspect-video w-full"
+                  onDurationChange={updateDuration}
+                  onPlay={(currentTime, actualDuration) => {
+                    updateDuration(actualDuration);
+                    setPlaying(true);
+                    setProgress(currentTime);
+                    persistHistory(Math.max(currentTime, 1));
+                  }}
+                  onPause={(currentTime, actualDuration) => {
+                    updateDuration(actualDuration);
+                    setPlaying(false);
+                    setProgress(currentTime);
+                    persistHistory(currentTime);
+                    flushWatchProgress(currentTime);
+                  }}
+                  onProgress={(currentTime, actualDuration) => {
+                    updateDuration(actualDuration);
+                    setProgress(currentTime);
+                  }}
+                  onEnded={(actualDuration) => {
+                    updateDuration(actualDuration);
+                    setPlaying(false);
+                    setProgress(actualDuration);
+                    persistHistory(actualDuration);
+                    flushWatchProgress(actualDuration);
+                  }}
                 />
               ) : currentVideo.url ? (
                 <video
@@ -253,16 +420,26 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                   src={currentVideo.url}
                   poster={currentVideo.thumbnailUrl}
                   controls
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => {
+                  onLoadedMetadata={(event) => updateDuration(event.currentTarget.duration)}
+                  onPlay={(event) => {
+                    setPlaying(true);
+                    setProgress(event.currentTarget.currentTime);
+                    persistHistory(Math.max(event.currentTarget.currentTime, 1));
+                  }}
+                  onPause={(event) => {
+                    const currentTime = event.currentTarget.currentTime;
                     setPlaying(false);
-                    sendWatchEvent(progressRef.current);
+                    setProgress(currentTime);
+                    persistHistory(currentTime);
+                    flushWatchProgress(currentTime);
                   }}
                   onTimeUpdate={(event) => setProgress(event.currentTarget.currentTime)}
-                  onEnded={() => {
+                  onEnded={(event) => {
+                    const finalDuration = event.currentTarget.duration || durationSeconds;
                     setPlaying(false);
-                    setProgress(durationSeconds);
-                    sendWatchEvent(durationSeconds);
+                    setProgress(finalDuration);
+                    persistHistory(finalDuration);
+                    flushWatchProgress(finalDuration);
                   }}
                 />
               ) : (
@@ -290,7 +467,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               </div>
               <div className="absolute bottom-7 left-4 right-4 flex justify-between text-xs font-bold text-white/85">
                 <span>{formatTime(progress)}</span>
-                <span>{currentVideo.duration}</span>
+                <span>{displayDuration}</span>
               </div>
               {reaction ? (
                 <div className="reaction-burst absolute left-1/2 top-1/2 -translate-x-1/2 rounded-full bg-white/95 px-5 py-3 text-sm font-black uppercase tracking-wide text-slate-950 shadow-2xl">
@@ -311,38 +488,34 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => {
-                    setLiked((value) => !value);
-                    setDisliked(false);
-                    api.likeVideo(currentVideo.id, "like").catch(() => undefined);
-                    triggerReaction("liked");
-                  }}
-                  className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition ${
+                  type="button"
+                  disabled={feedbackPending}
+                  onClick={() => submitFeedback("like")}
+                  className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
                     liked ? "bg-emerald-600 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  <span aria-hidden="true">▲</span> Like {342 + (liked ? 1 : 0)}
+                  <span aria-hidden="true">▲</span> Like {formatCount(likeCount)}
                 </button>
                 <button
-                  onClick={() => {
-                    setDisliked((value) => !value);
-                    setLiked(false);
-                    api.likeVideo(currentVideo.id, "dislike").catch(() => undefined);
-                    triggerReaction("noted");
-                  }}
-                  className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition ${
+                  type="button"
+                  disabled={feedbackPending}
+                  onClick={() => submitFeedback("dislike")}
+                  className={`pressable rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-70 ${
                     disliked ? "bg-rose-600 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  <span aria-hidden="true">▼</span> Dislike
+                  <span aria-hidden="true">▼</span> Dislike {formatCount(dislikeCount)}
                 </button>
                 <button
+                  type="button"
                   onClick={() => triggerReaction("link ready")}
                   className="pressable rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
                 >
                   <span aria-hidden="true">↗</span> Share
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setSaved((value) => !value);
                     triggerReaction(saved ? "removed" : "saved");
@@ -356,6 +529,12 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               </div>
             </div>
 
+            {interactionMessage ? (
+              <p className="mt-3 text-sm font-semibold text-slate-500" aria-live="polite">
+                {interactionMessage}
+              </p>
+            ) : null}
+
             <div className="mt-5 grid gap-2 rounded-xl bg-white p-2 sm:grid-cols-4">
               {[
                 ["◆", "Smart", "Better ranking"],
@@ -365,6 +544,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               ].map(([icon, label, detail]) => (
                 <button
                   key={label}
+                  type="button"
                   onClick={() => triggerReaction(label.toLowerCase())}
                   className="pressable rounded-lg bg-white px-3 py-3 text-left shadow-sm hover:bg-teal-50"
                 >
@@ -383,6 +563,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setSubscribed((value) => !value);
                   triggerReaction(subscribed ? "unsubscribed" : "subscribed");
@@ -399,7 +580,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               <p className={`text-sm leading-6 text-slate-700 ${expanded ? "" : "line-clamp-2"}`}>
                 {currentVideo.description} This lesson connects API design, persistence, security, and deployment into one workflow that fits the recommendation platform architecture.
               </p>
-              <button onClick={() => setExpanded((value) => !value)} className="pressable mt-2 rounded-md text-sm font-bold text-teal-700">
+              <button type="button" onClick={() => setExpanded((value) => !value)} className="pressable mt-2 rounded-md text-sm font-bold text-teal-700">
                 {expanded ? "Show less" : "Show more"}
               </button>
             </div>
@@ -415,32 +596,32 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               {comments.map((comment, index) => {
                 const active = commentLikes[comment.author] || false;
                 return (
-                <article key={comment.author} className="animate-in flex gap-3 py-4" style={{ animationDelay: `${index * 80}ms` }}>
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-bold text-slate-700">
-                    {comment.avatar}
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-bold text-slate-950">{comment.author}</p>
-                      <p className="text-xs text-slate-500">{comment.timestamp}</p>
+                  <article key={comment.author} className="animate-in flex gap-3 py-4" style={{ animationDelay: `${index * 80}ms` }}>
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-bold text-slate-700">
+                      {comment.avatar}
                     </div>
-                    <p className="mt-1 text-sm leading-6 text-slate-700">{comment.text}</p>
-                    <button
-                      onClick={() =>
-                        setCommentLikes((current) => ({
-                          ...current,
-                          [comment.author]: !active,
-                        }))
-                      }
-                      className={`pressable mt-2 rounded-md px-2 py-1 text-xs font-bold ${
-                        active ? "bg-teal-50 text-teal-800" : "text-slate-500 hover:text-teal-700"
-                      }`}
-                    >
-                      <span aria-hidden="true">▲</span> Like {comment.likes + (active ? 1 : 0)}
-                    </button>
-                  </div>
-                </article>
-              );
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-bold text-slate-950">{comment.author}</p>
+                        <p className="text-xs text-slate-500">{comment.timestamp}</p>
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">{comment.text}</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCommentLikes((current) => ({
+                            ...current,
+                            [comment.author]: !active,
+                          }))}
+                        className={`pressable mt-2 rounded-md px-2 py-1 text-xs font-bold ${
+                          active ? "bg-teal-50 text-teal-800" : "text-slate-500 hover:text-teal-700"
+                        }`}
+                      >
+                        <span aria-hidden="true">▲</span> Like {comment.likes + (active ? 1 : 0)}
+                      </button>
+                    </div>
+                  </article>
+                );
               })}
             </div>
           </section>

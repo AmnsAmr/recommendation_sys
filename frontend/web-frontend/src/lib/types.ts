@@ -80,6 +80,18 @@ export type ColdStartRecommendationsResponse = {
   generatedAt: string;
 };
 
+export type WatchAckResponse = {
+  acknowledged: boolean;
+};
+
+export type LikeActionResponse = {
+  videoId: string;
+  action: "like" | "dislike" | null;
+  likeCount: number;
+  dislikeCount: number;
+  recordedAt: string;
+};
+
 export type VideoUploadInitResponse = {
   videoId: string;
   uploadToken: string;

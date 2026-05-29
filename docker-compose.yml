@@ -15,6 +15,7 @@ services:
       REC_SERVICE_URL: http://recommendation-service:8083
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      APP_SECURITY_DISABLED: ${APP_SECURITY_DISABLED:-false}
     depends_on:
       user-service:
         condition: service_healthy
@@ -54,6 +55,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      APP_SECURITY_DISABLED: ${APP_SECURITY_DISABLED:-false}
       SERVER_PORT: 8081
     networks:
       - platform-net
@@ -88,12 +90,19 @@ services:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
       R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      VIDEO_STORAGE_PROVIDER: ${VIDEO_STORAGE_PROVIDER:-r2}
+      VIDEO_STORAGE_LOCAL_DIRECTORY: ${VIDEO_STORAGE_LOCAL_DIRECTORY:-/app/uploads}
+      VIDEO_STORAGE_PUBLIC_BASE_URL: ${VIDEO_STORAGE_PUBLIC_BASE_URL:-http://localhost:8080/videos/media}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       YOUTUBE_SYNC_ENABLED: ${YOUTUBE_SYNC_ENABLED:-true}
       YOUTUBE_SYNC_CATEGORY_MAPPINGS: ${YOUTUBE_SYNC_CATEGORY_MAPPINGS:-10:music,28:technology,20:gaming,27:education,24:entertainment}
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      APP_SECURITY_DISABLED: ${APP_SECURITY_DISABLED:-false}
       SERVER_PORT: 8082
+    volumes:
+      - video-uploads:/app/uploads
     networks:
       - platform-net
     restart: on-failure
@@ -130,6 +139,7 @@ services:
       SVD_SIDECAR_URL: ${SVD_SIDECAR_URL}
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      APP_SECURITY_DISABLED: ${APP_SECURITY_DISABLED:-false}
       SERVER_PORT: 8083
     depends_on:
       redis:
@@ -218,6 +228,7 @@ services:
 
 volumes:
   redis-data:
+  video-uploads:
 
 networks:
   platform-net:

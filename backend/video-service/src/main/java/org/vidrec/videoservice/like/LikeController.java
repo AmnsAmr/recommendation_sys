@@ -5,6 +5,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +26,12 @@ public class LikeController {
     ) {
         UUID userId = authenticatedUserId();
         return ResponseEntity.ok(likeService.recordLike(userId, videoId, request));
+    }
+
+    @GetMapping("/{videoId}/like")
+    public ResponseEntity<LikeResponse> getReaction(@PathVariable String videoId) {
+        UUID userId = authenticatedUserId();
+        return ResponseEntity.ok(likeService.getReaction(userId, videoId));
     }
 
     private UUID authenticatedUserId() {

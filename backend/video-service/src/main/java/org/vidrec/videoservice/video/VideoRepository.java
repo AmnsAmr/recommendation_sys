@@ -58,6 +58,14 @@ public interface VideoRepository extends JpaRepository<Video, String> {
     int incrementLikeCount(@Param("videoId") String videoId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Video v set v.likeCount = case when v.likeCount > 0 then v.likeCount - 1 else 0 end where v.id = :videoId")
+    int decrementLikeCount(@Param("videoId") String videoId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Video v set v.dislikeCount = v.dislikeCount + 1 where v.id = :videoId")
     int incrementDislikeCount(@Param("videoId") String videoId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Video v set v.dislikeCount = case when v.dislikeCount > 0 then v.dislikeCount - 1 else 0 end where v.id = :videoId")
+    int decrementDislikeCount(@Param("videoId") String videoId);
 }

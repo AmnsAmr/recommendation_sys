@@ -31,22 +31,38 @@ public class RecommendationService {
     public RecommendationResponse getRecommendations(UUID userId, int limit) {
         int resolvedLimit = limit <= 0 ? DEFAULT_LIMIT : limit;
         long interactionCount = interactionRepository.countByUserId(userId);
+        boolean hybridReady = interactionCount >= COLD_START_THRESHOLD;
+        boolean cacheableRequest = hybridReady && resolvedLimit == DEFAULT_LIMIT;
 
-        if (interactionCount < COLD_START_THRESHOLD) {
-            return new RecommendationResponse(
-                userId.toString(),
-                coldStartService.getColdByUser(userId, resolvedLimit),
-                "declared_cold_start",
-                LocalDateTime.now());
+        if (cacheableRequest) {
+            return cacheService.get(userId)
+                .map(cached -> new RecommendationResponse(
+                    userId.toString(),
+                    cached,
+                    "hybrid_cached",
+                    LocalDateTime.now()))
+                .orElseGet(() -> generateRecommendations(userId, resolvedLimit, interactionCount));
         }
 
-        return cacheService.get(userId)
-            .map(cached -> new RecommendationResponse(
-                userId.toString(),
-                cached,
-                "hybrid_cached",
-                LocalDateTime.now()))
-            .orElseGet(() -> generateHybrid(userId, resolvedLimit));
+        return generateRecommendations(userId, resolvedLimit, interactionCount);
+    }
+
+    private RecommendationResponse generateRecommendations(UUID userId, int limit, long interactionCount) {
+        if (interactionCount < COLD_START_THRESHOLD) {
+            return generateColdStart(userId, limit);
+        }
+
+        return generateHybrid(userId, limit);
+    }
+
+    private RecommendationResponse generateColdStart(UUID userId, int limit) {
+        List<String> ranked = coldStartService.getColdByUser(userId, limit);
+
+        return new RecommendationResponse(
+            userId.toString(),
+            ranked,
+            "declared_cold_start",
+            LocalDateTime.now());
     }
 
     private RecommendationResponse generateHybrid(UUID userId, int limit) {

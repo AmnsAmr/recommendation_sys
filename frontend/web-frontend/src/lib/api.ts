@@ -6,11 +6,13 @@ import type {
   ApiVideo,
   AuthResponse,
   ColdStartRecommendationsResponse,
+  LikeActionResponse,
   RecommendationResponse,
   SimilarVideosResponse,
   UserProfile,
   VideoListResponse,
   VideoUploadInitResponse,
+  WatchAckResponse,
   YouTubeSearchResponse,
 } from "@/lib/types";
 
@@ -18,10 +20,27 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const TOKEN_KEY = "auth_token";
 const AUTH_DISABLED = process.env.NEXT_PUBLIC_DISABLE_AUTH === "true";
 const TEST_TOKEN = "test-mode-token";
+const PROFILE_TTL_MS = 10 * 60 * 1000;
+const VIDEO_TTL_MS = 5 * 60 * 1000;
+const RECOMMENDATION_TTL_MS = 2 * 60 * 1000;
+const COLD_START_TTL_MS = 10 * 60 * 1000;
+const SIMILAR_VIDEOS_TTL_MS = 5 * 60 * 1000;
+
+type CacheEntry = {
+  expiresAt: number;
+  value: unknown;
+};
 
 type RequestOptions = RequestInit & {
   auth?: boolean;
 };
+
+type CacheableRequestOptions = {
+  force?: boolean;
+};
+
+const responseCache = new Map<string, CacheEntry>();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 export function getAuthToken() {
   if (typeof window === "undefined") {
@@ -42,6 +61,88 @@ export function setAuthToken(token: string) {
 
 export function clearAuthToken() {
   window.localStorage.removeItem(TOKEN_KEY);
+}
+
+function readCachedValue<T>(key: string) {
+  const entry = responseCache.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() >= entry.expiresAt) {
+    responseCache.delete(key);
+    return null;
+  }
+
+  return entry.value as T;
+}
+
+function writeCachedValue<T>(key: string, value: T, ttlMs: number) {
+  responseCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
+function invalidateCachedValue(key: string) {
+  responseCache.delete(key);
+}
+
+function cachedRequest<T>(
+  key: string,
+  ttlMs: number,
+  fetcher: () => Promise<T>,
+  options: CacheableRequestOptions = {},
+) {
+  if (!options.force) {
+    const cached = readCachedValue<T>(key);
+    if (cached !== null) {
+      return Promise.resolve(cached);
+    }
+
+    const pending = pendingRequests.get(key);
+    if (pending) {
+      return pending as Promise<T>;
+    }
+  }
+
+  const request = fetcher()
+    .then((value) => {
+      writeCachedValue(key, value, ttlMs);
+      return value;
+    })
+    .finally(() => {
+      pendingRequests.delete(key);
+    });
+
+  pendingRequests.set(key, request);
+  return request;
+}
+
+function getStoredUserId() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem("user");
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as { userId?: string };
+    return parsed.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+function invalidateRecommendationCaches(userId = getStoredUserId()) {
+  if (!userId) {
+    return;
+  }
+
+  invalidateCachedValue(`recommendations:${userId}`);
 }
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -65,10 +166,19 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
+    const contentType = response.headers.get("Content-Type") ?? "";
     try {
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(text || message);
+      }
+
       const payload = await response.json();
       message = payload?.error?.message || payload?.message || message;
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        message = error.message;
+      }
       // Keep the HTTP status message when the backend returns no JSON body.
     }
     throw new Error(message);
@@ -104,8 +214,13 @@ export const api = {
     });
   },
 
-  getProfile(userId: string) {
-    return apiRequest<UserProfile>(`/users/${userId}/profile`);
+  getProfile(userId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `profile:${userId}`,
+      PROFILE_TTL_MS,
+      () => apiRequest<UserProfile>(`/users/${userId}/profile`),
+      options,
+    );
   },
 
   getCatalog(params: { categoryId?: string; page?: number; size?: number } = {}) {
@@ -129,8 +244,13 @@ export const api = {
     return apiRequest<YouTubeSearchResponse>(`/videos/youtube/search?${search.toString()}`, { auth: false });
   },
 
-  getVideo(videoId: string) {
-    return apiRequest<ApiVideo>(`/videos/${encodeURIComponent(videoId)}`, { auth: false });
+  getVideo(videoId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `video:${videoId}`,
+      VIDEO_TTL_MS,
+      () => apiRequest<ApiVideo>(`/videos/${encodeURIComponent(videoId)}`, { auth: false }),
+      options,
+    );
   },
 
   getUserVideos(userId: string) {
@@ -144,17 +264,29 @@ export const api = {
     completionPct: number;
     source: string;
   }) {
-    return apiRequest("/videos/watch", {
+    return apiRequest<WatchAckResponse>("/videos/watch", {
       method: "POST",
       body: JSON.stringify(payload),
+    }).then((response) => {
+      invalidateCachedValue(`video:${payload.videoId}`);
+      invalidateRecommendationCaches();
+      return response;
     });
   },
 
   likeVideo(videoId: string, action: "like" | "dislike") {
-    return apiRequest(`/videos/${encodeURIComponent(videoId)}/like`, {
+    return apiRequest<LikeActionResponse>(`/videos/${encodeURIComponent(videoId)}/like`, {
       method: "POST",
       body: JSON.stringify({ action }),
+    }).then((response) => {
+      invalidateCachedValue(`video:${videoId}`);
+      invalidateRecommendationCaches();
+      return response;
     });
+  },
+
+  getVideoReaction(videoId: string) {
+    return apiRequest<LikeActionResponse>(`/videos/${encodeURIComponent(videoId)}/like`);
   },
 
   initUpload(payload: {
@@ -234,15 +366,30 @@ export const api = {
   },
 
   // -- Recommendations --
-  getPersonalizedRecommendations(userId: string) {
-    return apiRequest<RecommendationResponse>(`/recommendations/${userId}`);
+  getPersonalizedRecommendations(userId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `recommendations:${userId}`,
+      RECOMMENDATION_TTL_MS,
+      () => apiRequest<RecommendationResponse>(`/recommendations/${userId}`),
+      options,
+    );
   },
 
-  getColdStartRecommendations(categoryId: string) {
-    return apiRequest<ColdStartRecommendationsResponse>(`/recommendations/cold/${categoryId}`);
+  getColdStartRecommendations(categoryId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `cold-start:${categoryId}`,
+      COLD_START_TTL_MS,
+      () => apiRequest<ColdStartRecommendationsResponse>(`/recommendations/cold/${categoryId}`),
+      options,
+    );
   },
 
-  getSimilarVideos(videoId: string) {
-    return apiRequest<SimilarVideosResponse>(`/recommendations/similar/${videoId}`);
+  getSimilarVideos(videoId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `similar:${videoId}`,
+      SIMILAR_VIDEOS_TTL_MS,
+      () => apiRequest<SimilarVideosResponse>(`/recommendations/similar/${videoId}`),
+      options,
+    );
   },
 };

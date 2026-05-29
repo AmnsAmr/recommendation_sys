@@ -2,9 +2,11 @@ import { videos } from "@/lib/mock-data";
 import type { UiVideo } from "@/lib/video-mapper";
 
 export type HistoryItem = {
+  videoId: string;
   title: string;
   watchedAt: string;
   progress: number;
+  video?: UiVideo;
 };
 
 const HISTORY_KEY = "videorec-watch-history";
@@ -30,14 +32,33 @@ export function subscribeToHistory(onChange: () => void) {
 
 export function parseHistory(value: string | null) {
   try {
-    return JSON.parse(value || "[]") as HistoryItem[];
+    const parsed = JSON.parse(value || "[]") as Partial<HistoryItem>[];
+    return parsed.flatMap((item) => {
+      const title = item.title || item.video?.title;
+      if (!title || typeof item.watchedAt !== "string") {
+        return [];
+      }
+
+      const progress = typeof item.progress === "number"
+        ? Math.min(Math.max(item.progress, 0), 100)
+        : 0;
+
+      return [{
+        videoId: item.videoId || item.video?.id || title,
+        title,
+        watchedAt: item.watchedAt,
+        progress,
+        video: item.video,
+      }];
+    });
   } catch {
     return [];
   }
 }
 
 export function saveHistory(item: HistoryItem) {
-  const current = parseHistory(readHistorySnapshot()).filter((entry) => entry.title !== item.title);
+  const current = parseHistory(readHistorySnapshot())
+    .filter((entry) => entry.videoId !== item.videoId);
   const next = [item, ...current].slice(0, 30);
   window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(HISTORY_EVENT));
@@ -50,6 +71,10 @@ export function clearHistory() {
 
 export function hydrateHistory(items: HistoryItem[]) {
   return items.flatMap((item) => {
+    if (item.video) {
+      return [item];
+    }
+
     const video = videos.find((candidate) => candidate.title === item.title);
     if (!video) {
       return [];
@@ -62,6 +87,6 @@ export function hydrateHistory(items: HistoryItem[]) {
       source: "own",
     };
 
-    return [{ ...item, video: hydratedVideo }];
+    return [{ ...item, videoId: item.videoId || video.title, video: hydratedVideo }];
   });
 }

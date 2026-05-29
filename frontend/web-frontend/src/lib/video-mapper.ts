@@ -7,6 +7,7 @@ export type UiVideo = {
   creator: string;
   channel: string;
   views: string;
+  viewCount?: number;
   uploadedAt: string;
   duration: string;
   durationSeconds: number;
@@ -18,6 +19,8 @@ export type UiVideo = {
   youtubeId?: string;
   url?: string;
   description: string;
+  likeCount?: number;
+  dislikeCount?: number;
 };
 
 function formatDuration(seconds = 0) {
@@ -69,6 +72,7 @@ export function fromApiVideo(video: ApiVideo): UiVideo {
     creator: creatorSeed,
     channel,
     views: formatViews(video.viewCount),
+    viewCount: video.viewCount ?? 0,
     uploadedAt: formatUploadedAt(video.createdAt),
     duration: formatDuration(durationSeconds),
     durationSeconds,
@@ -80,6 +84,8 @@ export function fromApiVideo(video: ApiVideo): UiVideo {
     youtubeId,
     url: video.url,
     description: video.description || "No description available.",
+    likeCount: video.likeCount ?? 0,
+    dislikeCount: video.dislikeCount ?? 0,
   };
 }
 
@@ -93,6 +99,7 @@ export function fromYouTubeVideo(video: YouTubeVideo): UiVideo {
     creator: "YouTube",
     channel: "YouTube",
     views: "YouTube",
+    viewCount: 0,
     uploadedAt: "Live",
     duration: formatDuration(durationSeconds),
     durationSeconds,
@@ -103,5 +110,7 @@ export function fromYouTubeVideo(video: YouTubeVideo): UiVideo {
     source: "youtube",
     youtubeId: video.youtubeId,
     description: video.description || "YouTube video.",
+    likeCount: 0,
+    dislikeCount: 0,
   };
 }

@@ -30,7 +30,7 @@ public class SecurityConfig {
 
                 auth
                     .requestMatchers("/actuator/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/videos/catalog/**", "/videos/search/**", "/videos/user/**", "/videos/youtube/search", "/videos/*").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/videos/catalog/**", "/videos/search/**", "/videos/media/**", "/videos/user/**", "/videos/youtube/search", "/videos/*").permitAll()
                     .requestMatchers("/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated();
             })

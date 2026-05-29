@@ -17,6 +17,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import org.vidrec.videoservice.shared.exception.ApiException;
 import org.vidrec.videoservice.storage.R2StorageService;
@@ -142,6 +144,7 @@ public class VideoService {
             try (InputStream in = Files.newInputStream(temp)) {
                 r2StorageService.upload(s3Key, in, file.getSize(), file.getContentType());
             }
+            registerStorageRollbackCleanup(s3Key);
         } catch (IOException ex) {
             log.error("Failed to read upload stream for video={}", videoId, ex);
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
@@ -348,6 +351,27 @@ public class VideoService {
             case "video/quicktime" -> "mov";
             default -> "mp4";
         };
+    }
+
+    private void registerStorageRollbackCleanup(String s3Key) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    return;
+                }
+
+                try {
+                    r2StorageService.delete(s3Key);
+                } catch (RuntimeException ex) {
+                    log.warn("Failed to clean uploaded object after transaction rollback: key={}", s3Key, ex);
+                }
+            }
+        });
     }
 
     private String generateVideoId() {
