@@ -165,21 +165,40 @@ function HomepageContent() {
       const userJson = localStorage.getItem("user");
 
       if (active === forYouCategoryLabel && token && userJson) {
+        let userId: string | null = null;
         try {
-          const user = JSON.parse(userJson) as { userId?: string };
-          if (user.userId) {
-            const personalized = await api.getPersonalizedRecommendations(user.userId);
-            const personalizedVideos = await fetchVideosByIds((personalized.videoIds || []).slice(0, 24));
+          const parsed = JSON.parse(userJson) as { userId?: string };
+          userId = parsed.userId ?? null;
+        } catch {
+          // Unparseable user blob; skip the personalized branch entirely.
+        }
 
-            if (personalizedVideos.length > 0) {
-              return {
-                mode: "grid",
-                videos: personalizedVideos.map(fromApiVideo),
-                notice: noticeForStrategy(personalized.strategy),
-              };
-            }
+        if (userId) {
+          // Step 1: try the personalized engine. A failure here (e.g. the user.registered
+          // Kafka event hasn't propagated to the recommendation service yet) must NOT
+          // bypass the interest-sections fallback below — otherwise every new user falls
+          // through to the unfiltered global catalog and sees the same videos.
+          let personalizedVideos: Awaited<ReturnType<typeof api.getVideo>>[] = [];
+          let personalizedStrategy: string | undefined;
+          try {
+            const personalized = await api.getPersonalizedRecommendations(userId);
+            personalizedStrategy = personalized.strategy;
+            personalizedVideos = await fetchVideosByIds((personalized.videoIds || []).slice(0, 24));
+          } catch {
+            // Recommendation service unavailable or not yet warm; fall through.
+          }
 
-            const profile = await api.getProfile(user.userId);
+          if (personalizedVideos.length > 0) {
+            return {
+              mode: "grid",
+              videos: personalizedVideos.map(fromApiVideo),
+              notice: noticeForStrategy(personalizedStrategy),
+            };
+          }
+
+          // Step 2: build interest sections from the user's declared preferences.
+          try {
+            const profile = await api.getProfile(userId);
             const groups = buildInterestGroups(profile.preferences || []).slice(0, 4);
 
             if (groups.length > 0) {
@@ -195,9 +214,9 @@ function HomepageContent() {
                 };
               }
             }
+          } catch {
+            // Profile fetch failed; fall through to generic seeded feed.
           }
-        } catch {
-          // Fall through to generic seeded feed if profile loading fails.
         }
       }
 
@@ -337,7 +356,7 @@ function HomepageContent() {
                   <h2 className="text-xl font-black text-slate-950">{section.title}</h2>
                   <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
                 </div>
-                <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
+                <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                   {section.videos.map((video, index) => (
                     <div key={video.id} className="animate-in" style={{ animationDelay: `${index * 45}ms` }}>
                       <VideoCard video={video} />
@@ -348,7 +367,7 @@ function HomepageContent() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
+            <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {remoteVideos.map((video, index) => (
               <div key={video.id} className="animate-in" style={{ animationDelay: `${index * 45}ms` }}>
                 <VideoCard video={video} />

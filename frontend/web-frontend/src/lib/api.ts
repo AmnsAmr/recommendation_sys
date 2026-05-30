@@ -2,6 +2,7 @@ import type {
   AdminDashboardResponse,
   AdminUserListResponse,
   AdminVideoDashboardResponse,
+  AdminVideoDetail,
   AdminVideoListResponse,
   ApiVideo,
   AuthResponse,
@@ -353,6 +354,10 @@ export const api = {
 
   getPendingVideos() {
     return apiRequest<AdminVideoListResponse>("/admin/videos/pending?page=0&size=50");
+  },
+
+  getAdminVideo(videoId: string) {
+    return apiRequest<AdminVideoDetail>(`/admin/videos/${encodeURIComponent(videoId)}`);
   },
 
   approveVideo(videoId: string, notes = "") {

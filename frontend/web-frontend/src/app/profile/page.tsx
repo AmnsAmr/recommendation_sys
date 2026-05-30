@@ -8,9 +8,32 @@ import { useAuth } from "@/lib/auth";
 import { formatVideoCategoryLabel } from "@/lib/video-categories";
 import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
+function computeInitials(displayName?: string | null, username?: string | null) {
+  const source = (displayName || username || "").trim();
+  if (!source) {
+    return "?";
+  }
+  const words = source.split(/\s+/).filter(Boolean);
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+
+function formatCount(value: number) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+  }
+  return String(value);
+}
+
 export default function ProfilePage() {
   const { user } = useAuth();
   const [interests, setInterests] = useState<string[]>([]);
+  const [bio, setBio] = useState<string>("");
   const [uploads, setUploads] = useState<UiVideo[]>([]);
   const [loadingUploads, setLoadingUploads] = useState(false);
 
@@ -46,6 +69,7 @@ export default function ProfilePage() {
       .then((profile) => {
         if (active) {
           setInterests(profile.preferences.map((preference) => formatVideoCategoryLabel(preference.category)));
+          setBio(profile.bio || "");
         }
       })
       .catch(() => undefined);
@@ -55,24 +79,30 @@ export default function ProfilePage() {
     };
   }, [user?.userId]);
 
+  const initials = computeInitials(user?.displayName, user?.username);
+  const totalViews = uploads.reduce((sum, video) => sum + (video.viewCount ?? 0), 0);
+  const totalLikes = uploads.reduce((sum, video) => sum + (video.likeCount ?? 0), 0);
+
   return (
     <AppShell title="Creator profile" eyebrow="Account">
       <section className="grid gap-6 lg:grid-cols-[0.78fr_1.22fr]">
         <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start gap-4">
-            <div className="grid h-20 w-20 place-items-center rounded-lg bg-slate-950 text-2xl font-black text-white">AL</div>
+            <div className="grid h-20 w-20 place-items-center rounded-lg bg-slate-950 text-2xl font-black text-white">{initials}</div>
             <div>
               <p className="text-sm text-slate-500">@{user?.username || "guest"}</p>
               <h1 className="mt-1 text-3xl font-black text-slate-950">{user?.displayName || user?.username || "Guest"}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Backend developer focused on Java, data systems, and clean APIs.</p>
+              {bio ? (
+                <p className="mt-2 text-sm leading-6 text-slate-600">{bio}</p>
+              ) : null}
             </div>
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-2">
             {[
               ["Videos", String(uploads.length)],
-              ["Views", "8.4k"],
-              ["Match", "94%"],
+              ["Views", formatCount(totalViews)],
+              ["Likes", formatCount(totalLikes)],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg bg-slate-50 p-3">
                 <p className="text-xl font-black text-slate-950">{value}</p>
@@ -84,7 +114,6 @@ export default function ProfilePage() {
           <div className="mt-6">
             <div className="flex items-center justify-between">
               <h2 className="font-black text-slate-950">Interests</h2>
-              <button className="text-sm font-bold text-teal-700">Update</button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {interests.map((interest) => (

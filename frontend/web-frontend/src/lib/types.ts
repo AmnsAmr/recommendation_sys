@@ -127,10 +127,42 @@ export type AdminDashboardResponse = {
 export type AdminVideo = {
   videoId: string;
   title: string;
+  description?: string;
   uploaderId?: string;
   status: string;
+  categoryId?: string;
+  duration?: number;
+  viewCount?: number;
+  source?: string;
+  youtubeId?: string;
   thumbnailUrl?: string;
+  videoUrl?: string;
   createdAt?: string;
+};
+
+export type AdminVideoDetail = {
+  videoId: string;
+  title: string;
+  description?: string;
+  categoryId?: string;
+  tags?: string[];
+  source?: string;
+  youtubeId?: string;
+  uploaderId?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string;
+  duration?: number;
+  viewCount?: number;
+  likeCount?: number;
+  dislikeCount?: number;
+  language?: string;
+  status: string;
+  moderationNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  publishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type AdminVideoListResponse = {

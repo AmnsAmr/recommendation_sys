@@ -110,6 +110,10 @@ export function useAuth() {
   const user = useMemo(() => (AUTH_DISABLED ? TEST_USER : parseUser(rawUser)), [rawUser]);
 
   const logout = () => {
+    // History is per-user (see history.ts) so it doesn't leak between accounts;
+    // we intentionally do NOT wipe it on logout so the same user gets their
+    // history back on their next login (YouTube-style). If a privacy-sensitive
+    // "sign out and clear my history" button is needed, add it separately.
     window.localStorage.removeItem("user");
     clearAuthToken();
     emitAuthChange();
