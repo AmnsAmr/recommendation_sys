@@ -1,5 +1,6 @@
 import type {
   AdminDashboardResponse,
+  AdminUserDetail,
   AdminUserListResponse,
   AdminVideoDashboardResponse,
   AdminVideoDetail,
@@ -324,6 +325,10 @@ export const api = {
 
   getAdminUsers() {
     return apiRequest<AdminUserListResponse>("/admin/users?page=0&size=50");
+  },
+
+  getAdminUser(userId: string) {
+    return apiRequest<AdminUserDetail>(`/admin/users/${encodeURIComponent(userId)}`);
   },
 
   updateAdminUser(userId: string, payload: { role?: string }) {

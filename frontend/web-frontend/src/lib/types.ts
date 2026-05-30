@@ -116,6 +116,22 @@ export type AdminUserListResponse = {
   totalElements: number;
 };
 
+export type AdminUserDetail = {
+  userId: string;
+  email: string;
+  username: string;
+  displayName?: string;
+  bio?: string;
+  profilePictureUrl?: string;
+  role: string;
+  isActive: boolean;
+  banReason?: string;
+  bannedAt?: string;
+  preferences: UserPreference[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type AdminDashboardResponse = {
   totalUsers: number;
   activeUsers: number;
