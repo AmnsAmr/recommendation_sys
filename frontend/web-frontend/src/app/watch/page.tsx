@@ -514,7 +514,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                 />
               ) : (
                 <>
-                  <VideoPoster kind={currentVideo.poster} className="aspect-video rounded-none" player />
+                  <VideoPoster kind={currentVideo.poster} title={currentVideo.title} className="aspect-video rounded-none" player />
                   <button
                     type="button"
                     onClick={togglePlay}

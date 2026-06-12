@@ -113,16 +113,22 @@ export function VideoPoster({
   kind = "api",
   duration,
   label,
+  title,
   className = "",
   player = false,
 }: {
   kind?: string;
   duration?: string;
   label?: string;
+  title?: string;
   className?: string;
   player?: boolean;
 }) {
   const style = posterStyles[(kind as PosterKind) in posterStyles ? (kind as PosterKind) : "api"];
+  // When a real video title is supplied, show it as the headline (keeping the
+  // per-category colors) instead of the generic category caption.
+  const headline = title?.trim() || style.title;
+  const showSubtitle = !title?.trim();
 
   return (
     <div className={`group/poster relative overflow-hidden rounded-lg bg-gradient-to-br ${style.bg} ${className}`}>
@@ -151,10 +157,12 @@ export function VideoPoster({
             {label}
           </span>
         ) : null}
-        <p className={`${player ? "text-4xl sm:text-5xl" : "text-2xl"} font-black leading-none text-white`}>
-          {style.title}
+        <p className={`${player ? "text-4xl sm:text-5xl" : "text-2xl"} font-black leading-tight text-white line-clamp-2`}>
+          {headline}
         </p>
-        <p className="mt-1 text-sm font-bold text-white/78">{style.subtitle}</p>
+        {showSubtitle ? (
+          <p className="mt-1 text-sm font-bold text-white/78">{style.subtitle}</p>
+        ) : null}
       </div>
       {player ? (
         <div className="absolute inset-0 grid place-items-center">

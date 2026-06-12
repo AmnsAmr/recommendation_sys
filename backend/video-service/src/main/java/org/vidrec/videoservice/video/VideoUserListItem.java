@@ -2,6 +2,7 @@ package org.vidrec.videoservice.video;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 public record VideoUserListItem(
     String videoId,
@@ -14,6 +15,7 @@ public record VideoUserListItem(
     Long likeCount,
     Long dislikeCount,
     String language,
+    UUID uploaderId,
     String status,
     LocalDateTime createdAt
 ) {}

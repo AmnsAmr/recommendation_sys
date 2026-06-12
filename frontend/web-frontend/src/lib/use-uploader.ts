@@ -6,10 +6,12 @@ import { api } from "@/lib/api";
 /**
  * Resolve a user UUID to a display name (e.g. "Tester02") for cards/details.
  *
- * Reads from api.getProfile which already caches per userId (10 min TTL) and
- * dedupes concurrent in-flight requests, so rendering 24 cards by 10 unique
- * uploaders triggers at most 10 network calls — and zero on subsequent loads
- * within the TTL.
+ * Reads from api.getPublicProfile — the unauthenticated, owner-agnostic creator
+ * view — so names resolve for *any* uploader, not just the signed-in user's own
+ * videos. (api.getProfile is owner-only and 403s for other creators.) It caches
+ * per userId (10 min TTL) and dedupes concurrent in-flight requests, so
+ * rendering 24 cards by 10 unique uploaders triggers at most 10 network calls —
+ * and zero on subsequent loads within the TTL.
  *
  * Returns null while loading or on failure; callers should fall back to their
  * existing label (e.g. `Creator <uuid8>` or "YouTube").
@@ -24,15 +26,15 @@ export function useUploaderName(uploaderId?: string | null): string | null {
     }
 
     let active = true;
-    api.getProfile(uploaderId)
+    api.getPublicProfile(uploaderId)
       .then((profile) => {
         if (active) {
           setName(profile.displayName?.trim() || profile.username?.trim() || null);
         }
       })
       .catch(() => {
-        // Unauthenticated viewer, missing user, or backend hiccup — let caller
-        // fall back to its existing label.
+        // Missing user or backend hiccup — let caller fall back to its existing
+        // label.
         if (active) {
           setName(null);
         }

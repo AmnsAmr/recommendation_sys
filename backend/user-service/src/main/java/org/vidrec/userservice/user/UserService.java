@@ -98,6 +98,20 @@ public class UserService {
         return toUserProfileResponse(user);
     }
 
+    @Transactional(readOnly = true)
+    public PublicProfileResponse getPublicProfile(UUID userId) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> notFound("USER_NOT_FOUND", "No user with this ID."));
+        return new PublicProfileResponse(
+            user.getId(),
+            user.getUsername(),
+            user.getDisplayName(),
+            user.getBio(),
+            user.getProfilePictureUrl(),
+            user.getCreatedAt()
+        );
+    }
+
     @Transactional
     public UserProfileResponse updateProfile(UUID userId, UpdateProfileRequest request) {
         if (request.displayName() == null && request.bio() == null && request.profilePictureUrl() == null) {

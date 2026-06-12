@@ -9,6 +9,7 @@ import type {
   AuthResponse,
   ColdStartRecommendationsResponse,
   LikeActionResponse,
+  PublicProfile,
   RecommendationResponse,
   SimilarVideosResponse,
   UserProfile,
@@ -221,6 +222,17 @@ export const api = {
       `profile:${userId}`,
       PROFILE_TTL_MS,
       () => apiRequest<UserProfile>(`/users/${userId}/profile`),
+      options,
+    );
+  },
+
+  // Public creator info for rendering a video's channel name/avatar. Unlike
+  // getProfile (owner-only), this works for any uploader and any viewer.
+  getPublicProfile(userId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `public-profile:${userId}`,
+      PROFILE_TTL_MS,
+      () => apiRequest<PublicProfile>(`/users/${userId}/public-profile`, { auth: false }),
       options,
     );
   },

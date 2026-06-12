@@ -34,6 +34,17 @@ export type UserProfile = {
   updatedAt?: string;
 };
 
+// Public creator view — no email/role/preferences. Served without auth so any
+// viewer can resolve a video's channel name/avatar.
+export type PublicProfile = {
+  userId: string;
+  username: string;
+  displayName?: string;
+  bio?: string;
+  profilePictureUrl?: string;
+  createdAt?: string;
+};
+
 export type ApiVideo = {
   videoId: string;
   title: string;

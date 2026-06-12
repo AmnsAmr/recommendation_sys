@@ -158,7 +158,7 @@ export default function VideoModerationPage() {
                   {video.thumbnailUrl ? (
                     <img src={video.thumbnailUrl} alt="" className="aspect-video w-full rounded-md object-cover" />
                   ) : (
-                    <VideoPoster kind="video" duration={video.duration} className="aspect-video rounded-md" />
+                    <VideoPoster kind="video" title={video.title} duration={video.duration} className="aspect-video rounded-md" />
                   )}
                   {video.duration ? (
                     <span className="absolute bottom-1 right-1 rounded-md bg-slate-950/85 px-2 py-0.5 text-xs font-bold text-white">{video.duration}</span>
@@ -234,7 +234,7 @@ export default function VideoModerationPage() {
                   className="aspect-video w-full bg-slate-950"
                 />
               ) : (
-                <VideoPoster kind="video" className="aspect-video" player />
+                <VideoPoster kind="video" title={selectedVideo.title} className="aspect-video" player />
               )}
             </div>
 
