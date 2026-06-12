@@ -171,9 +171,16 @@ public class AdminVideoService {
         return new AdminVideoSummaryResponse(
             video.getId(),
             video.getTitle(),
+            video.getDescription(),
             video.getUploaderId(),
             video.getStatus().name(),
+            video.getCategoryId(),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getSource().name(),
+            video.getYoutubeId(),
             video.getThumbnailUrl(),
+            resolveVideoUrl(video),
             video.getCreatedAt()
         );
     }
@@ -191,8 +198,14 @@ public class AdminVideoService {
             video.getCategoryId(),
             tags,
             video.getSource().name(),
+            video.getYoutubeId(),
             video.getUploaderId(),
             video.getThumbnailUrl(),
+            resolveVideoUrl(video),
+            video.getDuration(),
+            video.getViewCount(),
+            video.getLikeCount(),
+            video.getDislikeCount(),
             video.getLanguage(),
             video.getStatus().name(),
             video.getModerationNotes(),
@@ -202,6 +215,14 @@ public class AdminVideoService {
             video.getCreatedAt(),
             video.getUpdatedAt()
         );
+    }
+
+    /** Build the public playback URL for admin preview. YouTube videos use their embed/watch URL on the client. */
+    private String resolveVideoUrl(Video video) {
+        if (video.getS3Key() == null || video.getS3Key().isBlank()) {
+            return null;
+        }
+        return r2StorageService.getPublicUrl(video.getS3Key());
     }
 
     private String buildUploadedPayload(Video video) {

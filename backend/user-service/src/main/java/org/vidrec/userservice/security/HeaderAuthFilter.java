@@ -30,6 +30,12 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
         "/actuator/health",
         "/actuator/info"
     );
+    // GET /users/{id}/public-profile is the unauthenticated creator view (see
+    // PublicProfileResponse). SecurityConfig permits it, but this filter runs
+    // first and would otherwise demand a gateway-injected X-User-Id, so it must
+    // be recognized as public here too.
+    private static final java.util.regex.Pattern PUBLIC_PROFILE_PATH =
+        java.util.regex.Pattern.compile("^/users/[^/]+/public-profile/?$");
 
     private final String internalServiceToken;
 
@@ -54,7 +60,8 @@ public class HeaderAuthFilter extends OncePerRequestFilter {
 
     private boolean isPublicPath(String path) {
         if (path == null) return false;
-        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
+        return PUBLIC_PATHS.stream().anyMatch(path::startsWith)
+            || PUBLIC_PROFILE_PATH.matcher(path).matches();
     }
 
     @Override

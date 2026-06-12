@@ -34,6 +34,17 @@ export type UserProfile = {
   updatedAt?: string;
 };
 
+// Public creator view — no email/role/preferences. Served without auth so any
+// viewer can resolve a video's channel name/avatar.
+export type PublicProfile = {
+  userId: string;
+  username: string;
+  displayName?: string;
+  bio?: string;
+  profilePictureUrl?: string;
+  createdAt?: string;
+};
+
 export type ApiVideo = {
   videoId: string;
   title: string;
@@ -116,6 +127,22 @@ export type AdminUserListResponse = {
   totalElements: number;
 };
 
+export type AdminUserDetail = {
+  userId: string;
+  email: string;
+  username: string;
+  displayName?: string;
+  bio?: string;
+  profilePictureUrl?: string;
+  role: string;
+  isActive: boolean;
+  banReason?: string;
+  bannedAt?: string;
+  preferences: UserPreference[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type AdminDashboardResponse = {
   totalUsers: number;
   activeUsers: number;
@@ -127,10 +154,42 @@ export type AdminDashboardResponse = {
 export type AdminVideo = {
   videoId: string;
   title: string;
+  description?: string;
   uploaderId?: string;
   status: string;
+  categoryId?: string;
+  duration?: number;
+  viewCount?: number;
+  source?: string;
+  youtubeId?: string;
   thumbnailUrl?: string;
+  videoUrl?: string;
   createdAt?: string;
+};
+
+export type AdminVideoDetail = {
+  videoId: string;
+  title: string;
+  description?: string;
+  categoryId?: string;
+  tags?: string[];
+  source?: string;
+  youtubeId?: string;
+  uploaderId?: string;
+  thumbnailUrl?: string;
+  videoUrl?: string;
+  duration?: number;
+  viewCount?: number;
+  likeCount?: number;
+  dislikeCount?: number;
+  language?: string;
+  status: string;
+  moderationNotes?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  publishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type AdminVideoListResponse = {

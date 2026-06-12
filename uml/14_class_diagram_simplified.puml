@@ -1,0 +1,139 @@
+@startuml Diagramme_de_classes_simplifié
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam ClassBorderColor #555555
+skinparam ClassBackgroundColor #F8F8F8
+skinparam PackageBorderColor #888888
+
+title Diagramme de classes -- Plateforme Vidéo
+
+' ============================================================
+' ENUMERATIONS (PPT rule CD9)
+' ============================================================
+enum "«Enumeration»\nRôle" as ERole {
+  UTILISATEUR
+  ADMINISTRATEUR
+}
+
+enum "«Enumeration»\nStatutVidéo" as EStatus {
+  EN_ATTENTE
+  EN_REVUE
+  PUBLIÉE
+  REJETÉE
+}
+
+enum "«Enumeration»\nOrigineVidéo" as ESource {
+  PLATEFORME
+  YOUTUBE
+}
+
+enum "«Enumeration»\nTypeAppréciation" as EAction {
+  AIMÉE
+  NON_AIMÉE
+}
+
+' ============================================================
+' SOUS-SYSTÈME : GestionUtilisateurs
+' ============================================================
+package "«SousSystème» GestionUtilisateurs" as PkgUser {
+
+  class Utilisateur {
+    - identifiant : UUID [1]
+    - email : String [1]
+    - motDePasse : String [1]
+    - pseudo : String [1]
+    - nomAffiché : String [1]
+    - biographie : String [0..1]
+    - actif : Booléen [1]
+    - rôle : Rôle [1]
+    - dateInscription : Date [1]
+    --
+    + S_inscrire( in email : String [1], in motDePasse : String [1], in pseudo : String [1], in intérêts : String [1..*] )
+    + Se_connecter( in email : String [1], in motDePasse : String [1] ) : Jeton
+    + Modifier_profil( in biographie : String [0..1], in urlPhoto : String [0..1] )
+    + Publier_vidéo( in titre : String [1], in fichier : Fichier [1], in catégorie : Catégorie [1] ) : Vidéo
+  }
+
+  class Administrateur {
+    --
+    + Modérer_vidéo( in vidéo : Vidéo [1], in décision : StatutVidéo [1] )
+    + Bannir_utilisateur( in utilisateur : Utilisateur [1], in motif : String [1] )
+    + Gérer_utilisateurs()
+  }
+
+  class PréférenceUtilisateur {
+    - catégorie : String [1]
+    - poids : Réel [1]
+    --
+    + Mettre_à_jour( in poids : Réel [1] )
+  }
+
+  Administrateur --|> Utilisateur
+  Utilisateur "1" *-- "1..*" PréférenceUtilisateur : possède
+  Utilisateur ..> ERole
+}
+
+' ============================================================
+' SOUS-SYSTÈME : GestionVidéos
+' ============================================================
+package "«SousSystème» GestionVidéos" as PkgVideo {
+
+  class Vidéo {
+    - identifiant : String [1]
+    - titre : String [1]
+    - description : String [0..1]
+    - durée : Entier [1]
+    - urlMiniature : String [1]
+    - nombreVues : Entier [1]
+    - statut : StatutVidéo [1]
+    - origine : OrigineVidéo [1]
+    - datePublication : Date [0..1]
+    --
+    + Lire() : Flux
+    + Incrémenter_vues()
+    + Approuver( in administrateur : Administrateur [1] )
+    + Rejeter( in administrateur : Administrateur [1], in motif : String [1] )
+    + Rechercher( in requête : String [1] ) : Vidéo [*]
+  }
+
+  class Catégorie {
+    - identifiant : String [1]
+    - nom : String [1]
+    --
+    + Lister_vidéos() : Vidéo [*]
+  }
+
+  class SessionVisionnage {
+    - identifiant : UUID [1]
+    - durée : Entier [1]
+    - pourcentageComplété : Réel [1]
+    - date : Date [1]
+    --
+    + Enregistrer()
+  }
+
+  class Appréciation {
+    - type : TypeAppréciation [1]
+    - date : Date [1]
+    --
+    + Enregistrer()
+  }
+
+  Vidéo "*" o-- "1" Catégorie         : classée dans
+  Vidéo "1" *-- "*" SessionVisionnage : tracée par
+  Vidéo "1" *-- "*" Appréciation      : appréciée par
+
+  Vidéo ..> EStatus
+  Vidéo ..> ESource
+  Appréciation ..> EAction
+}
+
+' ============================================================
+' Relations inter-sous-systèmes
+' ============================================================
+Utilisateur "1" -- "*" Vidéo             : publie
+Utilisateur "1" -- "*" SessionVisionnage : réalise
+Utilisateur "1" -- "*" Appréciation      : émet
+
+@enduml

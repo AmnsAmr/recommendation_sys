@@ -50,6 +50,14 @@ public class UserController {
         return ResponseEntity.ok(userService.getProfile(userId));
     }
 
+    // Public creator view (display name + avatar) so any viewer can see a video's
+    // channel name. Intentionally no owner check and no private fields — see
+    // PublicProfileResponse.
+    @GetMapping("/{userId}/public-profile")
+    public ResponseEntity<PublicProfileResponse> getPublicProfile(@PathVariable UUID userId) {
+        return ResponseEntity.ok(userService.getPublicProfile(userId));
+    }
+
     @PutMapping("/{userId}/profile")
     public ResponseEntity<UserProfileResponse> updateProfile(
         @PathVariable UUID userId,

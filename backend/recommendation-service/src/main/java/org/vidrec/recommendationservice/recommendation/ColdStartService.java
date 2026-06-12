@@ -8,10 +8,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 import org.vidrec.recommendationservice.content.ContentBasedService;
 import org.vidrec.recommendationservice.model.ItemFactor;
 import org.vidrec.recommendationservice.model.ItemFactorRepository;
@@ -49,7 +47,10 @@ public class ColdStartService {
                 userId,
                 UserCategoryProfileService.SOURCE_DECLARED);
         if (declaredProfiles.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "NO_PREFERENCES");
+            // No declared preferences yet (e.g. the user.registered Kafka event hasn't been
+            // consumed). Return an empty list so callers can fall back to a category-based
+            // feed instead of crashing the homepage with a 422.
+            return List.of();
         }
 
         Map<String, Double> declaredWeightsByCategory = declaredProfiles.stream()

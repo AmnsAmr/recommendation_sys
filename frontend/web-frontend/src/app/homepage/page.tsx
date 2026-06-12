@@ -84,6 +84,10 @@ function HomepageContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  // Backend category IDs the user declared at registration. Used by loadMore in
+  // "For You" mode so infinite-scroll keeps respecting interests instead of
+  // dumping the unfiltered catalog (which is entertainment-heavy from seed data).
+  const [preferredCategoryIds, setPreferredCategoryIds] = useState<string[]>([]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [notice, setNotice] = useState("");
   const routeGenre = searchParams.get("genre");
@@ -150,6 +154,7 @@ function HomepageContent() {
       setPage(0);
       setHasMore(true);
       setNotice("");
+      setPreferredCategoryIds([]);
 
       if (query) {
         const res = await api.searchVideos(query, { page: 0, size: 16 });
@@ -165,26 +170,56 @@ function HomepageContent() {
       const userJson = localStorage.getItem("user");
 
       if (active === forYouCategoryLabel && token && userJson) {
+        let userId: string | null = null;
         try {
-          const user = JSON.parse(userJson) as { userId?: string };
-          if (user.userId) {
-            const personalized = await api.getPersonalizedRecommendations(user.userId);
-            const personalizedVideos = await fetchVideosByIds((personalized.videoIds || []).slice(0, 24));
+          const parsed = JSON.parse(userJson) as { userId?: string };
+          userId = parsed.userId ?? null;
+        } catch {
+          // Unparseable user blob; skip the personalized branch entirely.
+        }
 
-            if (personalizedVideos.length > 0) {
-              return {
-                mode: "grid",
-                videos: personalizedVideos.map(fromApiVideo),
-                notice: noticeForStrategy(personalized.strategy),
-              };
-            }
+        if (userId) {
+          // Step 0: fetch profile up front so we know the user's declared categories.
+          // Needed for both the interest-sections fallback AND for loadMore's
+          // round-robin so infinite scroll keeps reflecting preferences instead of
+          // dumping the unfiltered (entertainment-heavy) catalog. api.getProfile
+          // caches per userId, so this is free after the first call within the TTL.
+          let preferredGroups: Array<{ backendCategoryId: string; title: string }> = [];
+          try {
+            const profile = await api.getProfile(userId);
+            preferredGroups = buildInterestGroups(profile.preferences || []).slice(0, 4);
+            setPreferredCategoryIds(preferredGroups.map((group) => group.backendCategoryId));
+          } catch {
+            // Profile fetch failed — fall through; loadMore will degrade to the catalog.
+          }
 
-            const profile = await api.getProfile(user.userId);
-            const groups = buildInterestGroups(profile.preferences || []).slice(0, 4);
+          // Step 1: try the personalized engine. A failure here (e.g. the user.registered
+          // Kafka event hasn't propagated to the recommendation service yet) must NOT
+          // bypass the interest-sections fallback below — otherwise every new user falls
+          // through to the unfiltered global catalog and sees the same videos.
+          let personalizedVideos: Awaited<ReturnType<typeof api.getVideo>>[] = [];
+          let personalizedStrategy: string | undefined;
+          try {
+            const personalized = await api.getPersonalizedRecommendations(userId);
+            personalizedStrategy = personalized.strategy;
+            personalizedVideos = await fetchVideosByIds((personalized.videoIds || []).slice(0, 24));
+          } catch {
+            // Recommendation service unavailable or not yet warm; fall through.
+          }
 
-            if (groups.length > 0) {
+          if (personalizedVideos.length > 0) {
+            return {
+              mode: "grid",
+              videos: personalizedVideos.map(fromApiVideo),
+              notice: noticeForStrategy(personalizedStrategy),
+            };
+          }
+
+          // Step 2: build interest sections from the user's declared preferences.
+          if (preferredGroups.length > 0) {
+            try {
               const sections = (await Promise.all(
-                groups.map((group) => fetchSection(group.title, group.backendCategoryId, true)),
+                preferredGroups.map((group) => fetchSection(group.title, group.backendCategoryId, true)),
               )).filter((section): section is FeedSection => section !== null);
 
               if (sections.length > 0) {
@@ -194,10 +229,10 @@ function HomepageContent() {
                   notice: "Built from the interests you picked when creating your account.",
                 };
               }
+            } catch {
+              // Section build failed; fall through to generic seeded feed.
             }
           }
-        } catch {
-          // Fall through to generic seeded feed if profile loading fails.
         }
       }
 
@@ -261,10 +296,22 @@ function HomepageContent() {
     setLoadingMore(true);
     const nextPage = page + 1;
     try {
-      const categoryId = active === forYouCategoryLabel ? undefined : resolveVideoCategoryId(active) ?? undefined;
-      const response = query
-        ? await api.searchVideos(query, { page: nextPage, size: 16 })
-        : await api.getCatalog({ categoryId, page: nextPage, size: 16 });
+      let response;
+      if (query) {
+        response = await api.searchVideos(query, { page: nextPage, size: 16 });
+      } else if (active === forYouCategoryLabel && preferredCategoryIds.length > 0) {
+        // Round-robin through the user's declared categories. Without this,
+        // For You's load-more would call getCatalog with no categoryId and
+        // surface the global catalog (~entertainment-heavy from seed data),
+        // ignoring preferences entirely.
+        const len = preferredCategoryIds.length;
+        const idx = (nextPage - 1) % len;
+        const innerPage = Math.floor((nextPage - 1) / len);
+        response = await api.getCatalog({ categoryId: preferredCategoryIds[idx], page: innerPage, size: 16 });
+      } else {
+        const categoryId = active === forYouCategoryLabel ? undefined : resolveVideoCategoryId(active) ?? undefined;
+        response = await api.getCatalog({ categoryId, page: nextPage, size: 16 });
+      }
       const nextVideos = (response.videos || []).map(fromApiVideo);
       setRemoteVideos((current) => {
         const merged = [...current];
@@ -337,7 +384,7 @@ function HomepageContent() {
                   <h2 className="text-xl font-black text-slate-950">{section.title}</h2>
                   <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
                 </div>
-                <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
+                <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                   {section.videos.map((video, index) => (
                     <div key={video.id} className="animate-in" style={{ animationDelay: `${index * 45}ms` }}>
                       <VideoCard video={video} />
@@ -348,7 +395,7 @@ function HomepageContent() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2">
+            <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {remoteVideos.map((video, index) => (
               <div key={video.id} className="animate-in" style={{ animationDelay: `${index * 45}ms` }}>
                 <VideoCard video={video} />

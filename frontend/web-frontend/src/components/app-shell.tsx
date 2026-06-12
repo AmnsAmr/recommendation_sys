@@ -55,120 +55,120 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
-        <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
-          <Link href="/homepage" className="flex items-center gap-3 focus-ring rounded-lg">
-            <BrandMark showName />
-          </Link>
+      <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-950">
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+          <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
+            <Link href="/homepage" className="flex items-center gap-3 focus-ring rounded-lg">
+              <BrandMark showName />
+            </Link>
 
-          <div className="mx-auto hidden min-w-0 flex-1 justify-center md:flex md:max-w-2xl">
-            <label className="sr-only" htmlFor="global-search">
-              Search videos
-            </label>
-            <form
-              className="flex w-full overflow-hidden rounded-full border border-slate-300 bg-white"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const value = query.trim();
-                router.push(value ? `/homepage?q=${encodeURIComponent(value)}` : "/homepage");
-              }}
+            <div className="mx-auto hidden min-w-0 flex-1 justify-center md:flex md:max-w-2xl">
+              <label className="sr-only" htmlFor="global-search">
+                Search videos
+              </label>
+              <form
+                className="flex w-full overflow-hidden rounded-full border border-slate-300 bg-white"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const value = query.trim();
+                  router.push(value ? `/homepage?q=${encodeURIComponent(value)}` : "/homepage");
+                }}
+              >
+                <input
+                  id="global-search"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search"
+                  className="h-10 min-w-0 flex-1 px-4 text-sm outline-none"
+                />
+                <button className="border-l border-slate-300 bg-slate-50 px-5 text-sm font-bold text-slate-700 hover:bg-slate-100">
+                  Search
+                </button>
+              </form>
+            </div>
+
+            <Link
+              href="/upload"
+              className="hidden rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 sm:block"
             >
-              <input
-                id="global-search"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search"
-                className="h-10 min-w-0 flex-1 px-4 text-sm outline-none"
-              />
-              <button className="border-l border-slate-300 bg-slate-50 px-5 text-sm font-bold text-slate-700 hover:bg-slate-100">
-                Search
+              Create
+            </Link>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="focus-ring grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-sm font-bold text-teal-800 shadow-sm"
+                aria-label="Open account menu"
+              >
+                {initials}
               </button>
-            </form>
-          </div>
-
-          <Link
-            href="/upload"
-            className="hidden rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 sm:block"
-          >
-            Create
-          </Link>
-
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpen((value) => !value)}
-              className="focus-ring grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-sm font-bold text-teal-800 shadow-sm"
-              aria-label="Open account menu"
-            >
-              {initials}
-            </button>
-            {open ? (
-              <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                <div className="border-b border-slate-100 px-3 py-3">
-                  <p className="truncate text-sm font-semibold text-slate-950">{user?.username || "Guest user"}</p>
-                  <p className="truncate text-xs text-slate-500">{user?.email || "Not signed in"}</p>
-                </div>
-                <div className="grid gap-1 py-2">
-                  {navItems.map((item) => (
-                    <Link key={item.href} href={item.href} className="rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
-                      {item.label}
+              {open ? (
+                <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                  <div className="border-b border-slate-100 px-3 py-3">
+                    <p className="truncate text-sm font-semibold text-slate-950">{user?.username || "Guest user"}</p>
+                    <p className="truncate text-xs text-slate-500">{user?.email || "Not signed in"}</p>
+                  </div>
+                  <div className="grid gap-1 py-2">
+                    {navItems.map((item) => (
+                      <Link key={item.href} href={item.href} className="rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                  {user ? (
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-700 hover:bg-rose-50"
+                    >
+                      Sign out
+                    </button>
+                  ) : (
+                    <Link href="/login" className="block rounded-lg px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50">
+                      Sign in
                     </Link>
-                  ))}
+                  )}
                 </div>
-                {user ? (
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-700 hover:bg-rose-50"
+              ) : null}
+            </div>
+          </div>
+        </header>
+
+        <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="hidden min-h-[calc(100vh-4rem)] border-r border-slate-200 bg-white px-3 py-4 lg:block">
+            <nav className="sticky top-20 grid gap-1">
+              {navItems.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                      active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-100"
+                    }`}
                   >
-                    Sign out
-                  </button>
-                ) : (
-                  <Link href="/login" className="block rounded-lg px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50">
-                    Sign in
+                    {item.label}
                   </Link>
-                )}
+                );
+              })}
+            </nav>
+          </aside>
+
+          <main className="w-full min-w-0 px-4 py-5 sm:px-6 lg:px-8">
+            {title ? (
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{eyebrow}</p>
+                  <h1 className="mt-1 text-2xl font-black tracking-normal text-slate-950">{title}</h1>
+                </div>
+                {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
               </div>
             ) : null}
-          </div>
+            {children}
+          </main>
         </div>
-      </header>
-
-      <div className="lg:grid lg:grid-cols-[220px_1fr]">
-        <aside className="hidden min-h-[calc(100vh-4rem)] border-r border-slate-200 bg-white px-3 py-4 lg:block">
-          <nav className="sticky top-20 grid gap-1">
-            {navItems.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                    active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <main className="w-full px-4 py-5 sm:px-6 lg:px-8">
-          {title ? (
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{eyebrow}</p>
-                <h1 className="mt-1 text-2xl font-black tracking-normal text-slate-950">{title}</h1>
-              </div>
-              {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-            </div>
-          ) : null}
-          {children}
-        </main>
       </div>
-    </div>
   );
 }

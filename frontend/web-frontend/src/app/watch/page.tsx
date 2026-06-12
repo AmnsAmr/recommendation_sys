@@ -8,6 +8,7 @@ import { VideoCard } from "@/components/video-card";
 import { VideoPoster } from "@/components/video-poster";
 import { api, getAuthToken } from "@/lib/api";
 import { saveHistory } from "@/lib/history";
+import { useUploaderName } from "@/lib/use-uploader";
 import { fromApiVideo, type UiVideo } from "@/lib/video-mapper";
 
 function formatTime(value: number) {
@@ -123,11 +124,13 @@ function WatchLoading() {
 }
 
 function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
+  const uploaderName = useUploaderName(currentVideo.uploaderId);
+  const channelLabel = uploaderName || currentVideo.channel;
+  const channelInitial = (uploaderName || currentVideo.channel || "?").trim().charAt(0).toUpperCase() || "?";
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -511,7 +514,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                 />
               ) : (
                 <>
-                  <VideoPoster kind={currentVideo.poster} className="aspect-video rounded-none" player />
+                  <VideoPoster kind={currentVideo.poster} title={currentVideo.title} className="aspect-video rounded-none" player />
                   <button
                     type="button"
                     onClick={togglePlay}
@@ -550,7 +553,7 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
                 <p className="text-sm font-bold text-teal-700">{currentVideo.category}</p>
                 <h1 className="mt-2 text-2xl font-black text-slate-950 sm:text-3xl">{currentVideo.title}</h1>
                 <p className="mt-2 text-sm text-slate-500">
-                  {currentVideo.views} views - {currentVideo.uploadedAt} - {currentVideo.score} match
+                  {currentVideo.views} views · {currentVideo.uploadedAt}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -621,31 +624,16 @@ function WatchExperience({ currentVideo }: { currentVideo: UiVideo }) {
               ))}
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-4 border-t border-slate-100 pt-5">
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded-lg bg-slate-950 text-sm font-bold text-white">A</div>
-                <div>
-                  <p className="font-bold text-slate-950">{currentVideo.channel}</p>
-                  <p className="text-sm text-slate-500">12.3k subscribers</p>
-                </div>
+            <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-5">
+              <div className="grid h-12 w-12 place-items-center rounded-lg bg-slate-950 text-sm font-bold text-white">
+                {channelInitial}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubscribed((value) => !value);
-                  triggerReaction(subscribed ? "unsubscribed" : "subscribed");
-                }}
-                className={`pressable rounded-lg px-4 py-2 text-sm font-bold ${
-                  subscribed ? "bg-teal-700 text-white" : "bg-slate-950 text-white hover:bg-teal-800"
-                }`}
-              >
-                <span aria-hidden="true">{subscribed ? "✓" : "+"}</span> {subscribed ? "Subscribed" : "Subscribe"}
-              </button>
+              <p className="font-bold text-slate-950">{channelLabel}</p>
             </div>
 
             <div className="mt-5 rounded-xl bg-white p-4">
               <p className={`text-sm leading-6 text-slate-700 ${expanded ? "" : "line-clamp-2"}`}>
-                {currentVideo.description} This lesson connects API design, persistence, security, and deployment into one workflow that fits the recommendation platform architecture.
+                {currentVideo.description}
               </p>
               <button type="button" onClick={() => setExpanded((value) => !value)} className="pressable mt-2 rounded-md text-sm font-bold text-teal-700">
                 {expanded ? "Show less" : "Show more"}

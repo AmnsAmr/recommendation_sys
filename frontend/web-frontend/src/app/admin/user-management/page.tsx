@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
+import { ConfirmDialog, type ConfirmDialogConfig } from "@/components/confirm-dialog";
 import { api } from "@/lib/api";
-import type { AdminUser as ApiAdminUser } from "@/lib/types";
+import type { AdminUser as ApiAdminUser, AdminUserDetail } from "@/lib/types";
+import { formatVideoCategoryLabel } from "@/lib/video-categories";
 
 type AdminUser = {
   userId: string;
@@ -32,6 +34,11 @@ export default function UserManagementPage() {
   const [role, setRole] = useState("All roles");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  // Per-user detail (interests, banReason, bio) fetched lazily on selection.
+  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  // null = no dialog. Setting it opens a confirm modal for destructive actions.
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmDialogConfig | null>(null);
 
   useEffect(() => {
     api.getAdminUsers()
@@ -55,6 +62,50 @@ export default function UserManagementPage() {
   );
 
   const selectedUser = users.find((user) => user.username === selectedUsername) || users[0];
+
+  // Fetch the selected user's full detail (preferences, banReason, bio) — the
+  // list endpoint only returns summary fields. Keyed on userId so re-selecting
+  // the same user doesn't re-fetch within the render cycle.
+  useEffect(() => {
+    if (!selectedUser?.userId) {
+      setDetail(null);
+      return;
+    }
+
+    let active = true;
+    setDetailLoading(true);
+    api.getAdminUser(selectedUser.userId)
+      .then((response) => {
+        if (active) {
+          setDetail(response);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDetail(null);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedUser?.userId]);
+
+  const interestsLabel = detailLoading
+    ? "Loading..."
+    : (detail?.preferences || [])
+        .map((preference) => formatVideoCategoryLabel(preference.category))
+        .filter(Boolean)
+        .join(", ") || "No interests declared";
+
+  const reasonLabel = selectedUser?.status === "Banned"
+    ? (detail?.banReason?.trim() || (detailLoading ? "Loading..." : "No reason recorded"))
+    : "No active restriction";
 
   const updateSelectedUser = (changes: Partial<AdminUser>, message: string) => {
     const request =
@@ -175,10 +226,11 @@ export default function UserManagementPage() {
             <dl className="mt-5 space-y-3 text-sm">
               {[
                 ["Email", selectedUser.email],
+                ["Display name", detail?.displayName?.trim() || "—"],
                 ["Role", selectedUser.role],
                 ["Status", selectedUser.status],
-                ["Reason", selectedUser.status === "Banned" ? "Spam behavior" : "No active restriction"],
-                ["Interests", "technology, gaming"],
+                ["Reason", reasonLabel],
+                ["Interests", interestsLabel],
               ].map(([label, value]) => (
                 <div key={label} className="grid grid-cols-[100px_1fr] gap-3">
                   <dt className="text-slate-500">{label}</dt>
@@ -188,7 +240,20 @@ export default function UserManagementPage() {
             </dl>
             <div className="mt-6 grid gap-2">
               <button
-                onClick={() => updateSelectedUser({ status: selectedUser.status === "Banned" ? "Active" : "Banned" }, `${selectedUser.username} status updated.`)}
+                onClick={() => {
+                  if (selectedUser.status === "Banned") {
+                    // Restorative — no confirm needed.
+                    updateSelectedUser({ status: "Active" }, `${selectedUser.username} unbanned.`);
+                    return;
+                  }
+                  setConfirmConfig({
+                    title: `Ban ${selectedUser.username}?`,
+                    message: `${selectedUser.username} will be signed out and blocked from logging in. You can unban them later.`,
+                    confirmLabel: "Ban user",
+                    variant: "danger",
+                    onConfirm: () => updateSelectedUser({ status: "Banned" }, `${selectedUser.username} banned.`),
+                  });
+                }}
                 className="pressable rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
               >
                 {selectedUser.status === "Banned" ? "Unban user" : "Ban user"}
@@ -200,7 +265,13 @@ export default function UserManagementPage() {
                 {selectedUser.role === "ADMIN" ? "Demote to user" : "Promote to admin"}
               </button>
               <button
-                onClick={deleteSelectedUser}
+                onClick={() => setConfirmConfig({
+                  title: `Delete ${selectedUser.username}?`,
+                  message: `This permanently removes ${selectedUser.username}'s account and preferences from the user database. Their uploaded videos and recommendation history are not cleaned up automatically. This cannot be undone.`,
+                  confirmLabel: "Delete account",
+                  variant: "danger",
+                  onConfirm: deleteSelectedUser,
+                })}
                 className="pressable rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700"
               >
                 Delete account
@@ -209,6 +280,8 @@ export default function UserManagementPage() {
           </aside>
         ) : null}
       </div>
+
+      <ConfirmDialog config={confirmConfig} onClose={() => setConfirmConfig(null)} />
     </AdminShell>
   );
 }

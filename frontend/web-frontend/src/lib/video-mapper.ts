@@ -21,11 +21,16 @@ export type UiVideo = {
   description: string;
   likeCount?: number;
   dislikeCount?: number;
+  // Original uploader UUID — kept so client components can fetch the user's
+  // real displayName via useUploaderName() instead of showing "Creator <uuid8>".
+  uploaderId?: string;
 };
 
 function formatDuration(seconds = 0) {
   if (!seconds || seconds < 0) {
-    return "00:00";
+    // Empty string lets callers hide the badge entirely instead of showing a misleading "0:00".
+    // YouTube-seeded videos arrive with duration=0 because the seeder doesn't probe.
+    return "";
   }
 
   const minutes = Math.floor(seconds / 60);
@@ -54,16 +59,37 @@ function formatUploadedAt(value?: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function isLikelyUrl(value: string) {
+  // Accept absolute URLs, protocol-relative URLs, and root-relative paths.
+  // Rejects junk like "5498" that the seeder occasionally lands in thumbnailUrl,
+  // so the youtubeId fallback below can take over.
+  return /^(https?:)?\/\//i.test(value) || value.startsWith("/");
+}
+
+function upgradeThumb(url?: string, youtubeId?: string) {
+  const safe = url && isLikelyUrl(url) ? url : undefined;
+
+  if (safe && /i\.ytimg\.com|img\.youtube\.com/.test(safe)) {
+    return safe.replace(/\/(default|mqdefault|hqdefault|sddefault)\.jpg/, "/maxresdefault.jpg");
+  }
+  if (!safe && youtubeId) {
+    return `https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg`;
+  }
+  return safe;
+}
+
 export function fromApiVideo(video: ApiVideo): UiVideo {
   const youtubeId = video.youtubeId || (video.source === "youtube" ? video.videoId : undefined);
   const category = formatVideoCategoryLabel(video.categoryId || video.tags?.[0] || "Video");
   const durationSeconds = video.duration || 0;
-  const thumbnailUrl = video.thumbnailUrl || (youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined);
+  const thumbnailUrl = upgradeThumb(video.thumbnailUrl, youtubeId);
   const creatorSeed = video.uploaderId?.slice(0, 8) || (youtubeId ? youtubeId.slice(0, 6) : "catalog");
   const channel = video.uploaderId
     ? `Creator ${video.uploaderId.slice(0, 8)}`
     : video.source === "youtube"
-      ? `${category} Archive`
+      // Used to be `${category} Archive`, which produced "Music Archive" / "Cars Archive" right
+      // beneath the category badge on each card — looked like the category was duplicated.
+      ? "YouTube"
       : "VideoRec";
 
   return {
@@ -86,6 +112,7 @@ export function fromApiVideo(video: ApiVideo): UiVideo {
     description: video.description || "No description available.",
     likeCount: video.likeCount ?? 0,
     dislikeCount: video.dislikeCount ?? 0,
+    uploaderId: video.uploaderId,
   };
 }
 
@@ -106,7 +133,7 @@ export function fromYouTubeVideo(video: YouTubeVideo): UiVideo {
     category,
     score: "YouTube",
     poster: "youtube",
-    thumbnailUrl: video.thumbnailUrl || `https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`,
+    thumbnailUrl: upgradeThumb(video.thumbnailUrl, video.youtubeId),
     source: "youtube",
     youtubeId: video.youtubeId,
     description: video.description || "YouTube video.",

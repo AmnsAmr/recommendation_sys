@@ -1,12 +1,15 @@
 import type {
   AdminDashboardResponse,
+  AdminUserDetail,
   AdminUserListResponse,
   AdminVideoDashboardResponse,
+  AdminVideoDetail,
   AdminVideoListResponse,
   ApiVideo,
   AuthResponse,
   ColdStartRecommendationsResponse,
   LikeActionResponse,
+  PublicProfile,
   RecommendationResponse,
   SimilarVideosResponse,
   UserProfile,
@@ -223,6 +226,17 @@ export const api = {
     );
   },
 
+  // Public creator info for rendering a video's channel name/avatar. Unlike
+  // getProfile (owner-only), this works for any uploader and any viewer.
+  getPublicProfile(userId: string, options: CacheableRequestOptions = {}) {
+    return cachedRequest(
+      `public-profile:${userId}`,
+      PROFILE_TTL_MS,
+      () => apiRequest<PublicProfile>(`/users/${userId}/public-profile`, { auth: false }),
+      options,
+    );
+  },
+
   getCatalog(params: { categoryId?: string; page?: number; size?: number } = {}) {
     const search = new URLSearchParams();
     if (params.categoryId) {
@@ -325,6 +339,10 @@ export const api = {
     return apiRequest<AdminUserListResponse>("/admin/users?page=0&size=50");
   },
 
+  getAdminUser(userId: string) {
+    return apiRequest<AdminUserDetail>(`/admin/users/${encodeURIComponent(userId)}`);
+  },
+
   updateAdminUser(userId: string, payload: { role?: string }) {
     return apiRequest(`/admin/users/${userId}`, {
       method: "PUT",
@@ -353,6 +371,10 @@ export const api = {
 
   getPendingVideos() {
     return apiRequest<AdminVideoListResponse>("/admin/videos/pending?page=0&size=50");
+  },
+
+  getAdminVideo(videoId: string) {
+    return apiRequest<AdminVideoDetail>(`/admin/videos/${encodeURIComponent(videoId)}`);
   },
 
   approveVideo(videoId: string, notes = "") {

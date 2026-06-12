@@ -40,6 +40,7 @@ public class VideoService {
     private final CategoryRepository categoryRepository;
     private final R2StorageService r2StorageService;
     private final VideoDurationProbe videoDurationProbe;
+    private final VideoThumbnailGenerator videoThumbnailGenerator;
 
     @Transactional
     public VideoUploadInitResponse initUpload(UUID uploaderId, VideoUploadInitRequest request) {
@@ -134,9 +135,12 @@ public class VideoService {
 
         String extension = extractExtension(file.getContentType());
         String s3Key = "videos/" + videoId + "." + extension;
+        String thumbnailKey = "thumbnails/" + videoId + ".jpg";
 
         Path temp = null;
+        Path thumbTemp = null;
         Integer durationSeconds = null;
+        boolean thumbnailUploaded = false;
         try {
             temp = Files.createTempFile("upload-" + videoId + "-", "." + extension);
             file.transferTo(temp);
@@ -145,25 +149,31 @@ public class VideoService {
                 r2StorageService.upload(s3Key, in, file.getSize(), file.getContentType());
             }
             registerStorageRollbackCleanup(s3Key);
+
+            // Best-effort thumbnail: if ffmpeg fails, thumbnailUrl stays null and
+            // the frontend falls back to its generated poster.
+            thumbTemp = videoThumbnailGenerator.generateJpeg(temp, videoId);
+            if (thumbTemp != null) {
+                try (InputStream thumbIn = Files.newInputStream(thumbTemp)) {
+                    r2StorageService.upload(thumbnailKey, thumbIn, Files.size(thumbTemp), "image/jpeg");
+                }
+                registerStorageRollbackCleanup(thumbnailKey);
+                thumbnailUploaded = true;
+            }
         } catch (IOException ex) {
             log.error("Failed to read upload stream for video={}", videoId, ex);
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "Failed to process uploaded file.", List.of());
         } finally {
-            if (temp != null) {
-                try {
-                    Files.deleteIfExists(temp);
-                } catch (IOException ex) {
-                    log.warn("Failed to delete temp upload file {}: {}", temp, ex.getMessage());
-                }
-            }
+            deleteTempFile(temp);
+            deleteTempFile(thumbTemp);
         }
 
         token.setUsed(true);
         uploadTokenRepository.save(token);
 
         String videoUrl = r2StorageService.getPublicUrl(s3Key);
-        String thumbnailUrl = r2StorageService.getPublicUrl("thumbnails/" + videoId + ".jpg");
+        String thumbnailUrl = thumbnailUploaded ? r2StorageService.getPublicUrl(thumbnailKey) : null;
 
         video.setS3Key(s3Key);
         video.setThumbnailUrl(thumbnailUrl);
@@ -291,6 +301,7 @@ public class VideoService {
             video.getLikeCount(),
             video.getDislikeCount(),
             video.getLanguage(),
+            video.getUploaderId(),
             video.getStatus().name(),
             video.getCreatedAt()
         );
@@ -308,6 +319,7 @@ public class VideoService {
             video.getLikeCount(),
             video.getLanguage(),
             video.getSource().name().toLowerCase(),
+            video.getUploaderId(),
             video.getCreatedAt()
         );
     }
@@ -326,6 +338,7 @@ public class VideoService {
             video.getLikeCount(),
             video.getDislikeCount(),
             video.getLanguage(),
+            video.getUploaderId(),
             video.getCreatedAt()
         );
     }
@@ -351,6 +364,17 @@ public class VideoService {
             case "video/quicktime" -> "mov";
             default -> "mp4";
         };
+    }
+
+    private void deleteTempFile(Path temp) {
+        if (temp == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(temp);
+        } catch (IOException ex) {
+            log.warn("Failed to delete temp file {}: {}", temp, ex.getMessage());
+        }
     }
 
     private void registerStorageRollbackCleanup(String s3Key) {
